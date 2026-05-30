@@ -1,0 +1,21 @@
+// Copy this file to firmware/include/config.h and fill in the values.
+// The real config.h is git-ignored so secrets stay local.
+//
+// Generate the device-side credentials with:
+//   pnpm provision-device --id=ESP_FOO --username=batch-1 [--password=...] [--claim-code=...]
+
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#define WIFI_SSID    "your-wifi-ssid"
+#define WIFI_PASS    "your-wifi-pass"
+
+#define DEVICE_ID    "ESP_BEDROOM_FLOWERS_01"
+#define DEVICE_USER  "batch-2026-05"
+#define DEVICE_PASS  "your-device-password"
+#define CLAIM_CODE   "A1B2C3"
+
+// Base URL of the deployed Next.js web-app. No trailing slash.
+#define SERVER_URL   "https://your-app.vercel.app"
+
+#endif

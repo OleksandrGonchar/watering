@@ -1,0 +1,57 @@
+# Node.js
+node_modules/
+.next/
+out/
+.env
+.env.*
+!.env.example
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Prisma
+web-app/prisma/migrations/dev/
+
+# pnpm
+.pnpm-store/
+
+# PlatformIO
+firmware/.pio/
+firmware/.pioenvs/
+firmware/.piolibdeps/
+firmware/.clang_complete
+firmware/.gcc-flags.json
+.pio/
+
+# Firmware secrets
+firmware/include/config.h
+firmware/data/secrets/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Build artefacts
+*.bin
+*.elf
+*.map
+
+# Local config
+secrets.yaml
+*.local.yaml
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# TypeScript
+*.tsbuildinfo

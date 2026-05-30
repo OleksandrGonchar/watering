@@ -1,0 +1,81 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        String   @id
+  createdAt DateTime @default(now())
+  devices   Device[]
+}
+
+model DeviceCredential {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  label        String?
+  createdAt    DateTime @default(now())
+  devices      Device[]
+}
+
+model Device {
+  id            String  @id
+  credentialId  String
+  credential    DeviceCredential @relation(fields: [credentialId], references: [id])
+  ownerId       String?
+  owner         User?   @relation(fields: [ownerId], references: [id])
+  name          String?
+  timezone      String  @default("Europe/Kyiv")
+  claimCodeHash String?
+  configVersion Int     @default(1)
+  lastSeenAt    DateTime?
+  batteryPct    Int?
+  createdAt     DateTime @default(now())
+
+  schedules      Schedule[]
+  refreshTokens  DeviceRefreshToken[]
+  wateringEvents WateringEvent[]
+
+  @@index([credentialId])
+  @@index([ownerId])
+}
+
+model Schedule {
+  id              Int    @id @default(autoincrement())
+  deviceId        String
+  device          Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  timeLocal       String
+  durationSeconds Int
+  position        Int
+
+  @@index([deviceId])
+}
+
+model DeviceRefreshToken {
+  id        String    @id @default(cuid())
+  deviceId  String
+  device    Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([deviceId])
+}
+
+model WateringEvent {
+  id              Int      @id @default(autoincrement())
+  deviceId        String
+  device          Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  scheduleId      Int?
+  durationSeconds Int
+  wateredAt       DateTime
+
+  @@index([deviceId, wateredAt])
+}
