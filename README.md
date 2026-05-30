@@ -30,16 +30,125 @@
 Повну специфікацію див. у
 [`.cursor/plans/smart-watering-monorepo_15eea35e.plan.md`](.cursor/plans/smart-watering-monorepo_15eea35e.plan.md).
 
-## Залізо
+## Залізо: схема підключення
 
-| Компонент              | Підключення                                      |
-| ---------------------- | ------------------------------------------------ |
-| LoLin NodeMCU V3       | USB до ноута для прошивки                        |
-| Помпа 5V (R385 чи інша) | `+5V` → помпа(+); помпа(–) → drain мосфета      |
-| N-ch logic-level MOSFET | Gate → GPIO12 (D6) через 1kΩ; pulldown 100kΩ     |
-| DS3231 (I2C)           | SDA → D2 (GPIO4); SCL → D1 (GPIO5); 3V3, GND     |
-| 18650 + плата заряду    | Вихід 5V → Vin/VU плати                          |
-| Перемичка               | GPIO16 (D0) ↔ RST (для wake from deep sleep)     |
+### Список компонентів
+
+| #  | Компонент                              | К-сть | Примітки                                       |
+| -- | -------------------------------------- | ----- | ---------------------------------------------- |
+| 1  | LoLin NodeMCU V3 (ESP8266 ESP-12E)     | 1     | CH340 USB-чіп                                  |
+| 2  | DS3231 RTC модуль (з CR2032)           | 1     | I2C, точніший за DS1307                        |
+| 3  | Помпа 5V мембранна (R385 або аналог)   | 1     | ~80–120 мА робочий струм                       |
+| 4  | N-channel logic-level MOSFET           | 1     | AO3400, IRLZ44N, 2N7000 — Vgs(th) ≤ 2.5 В      |
+| 5  | Резистор 1 кΩ                          | 1     | gate-резистор                                  |
+| 6  | Резистор 100 кΩ                        | 1     | gate pulldown                                  |
+| 7  | Діод 1N4007 / SS34                     | 1     | flyback-захист помпи                           |
+| 8  | Li-ion 18650 + holder                  | 1     | 3.0–4.2 В                                      |
+| 9  | Плата заряду + boost до 5В             | 1     | TP4056 + SX1308 / готовий PowerBoost           |
+| 10 | Дрот / перемичка                       | 1     | D0 ↔ RST для wake-from-sleep                   |
+
+### Pin-mapping NodeMCU V3
+
+| Пін NodeMCU      | GPIO    | Призначення                              |
+| ---------------- | ------- | ---------------------------------------- |
+| **VU** (або Vin) | —       | +5В вхід від плати заряду                |
+| **GND**          | —       | Спільна земля (всі модулі)               |
+| **3V3**          | —       | +3.3В для DS3231                         |
+| **D2**           | GPIO4   | I2C **SDA** → DS3231 SDA                 |
+| **D1**           | GPIO5   | I2C **SCL** → DS3231 SCL                 |
+| **D6**           | GPIO12  | Керування MOSFET (gate)                  |
+| **D0**           | GPIO16  | ↔ **RST** (jumper для wake-from-sleep)   |
+| **A0**           | —       | резерв (майбутнє вимірювання батареї)    |
+
+### Логічна схема
+
+```mermaid
+flowchart LR
+    subgraph PWR["Живлення"]
+        BAT["18650<br/>3.0-4.2 V"]
+        CHG["Charge board<br/>+ boost 5 V"]
+        USB["USB зарядка"]
+        BAT --- CHG
+        USB --- CHG
+    end
+
+    subgraph NMCU["LoLin NodeMCU V3"]
+        VU["VU"]
+        GND["GND"]
+        V3V3["3V3"]
+        D1["D1 / GPIO5"]
+        D2["D2 / GPIO4"]
+        D6["D6 / GPIO12"]
+        D0["D0 / GPIO16"]
+        RST["RST"]
+    end
+
+    subgraph RTC_["DS3231"]
+        rVCC["VCC"]
+        rGND["GND"]
+        rSDA["SDA"]
+        rSCL["SCL"]
+    end
+
+    subgraph PUMP_["Помпа + low-side switch"]
+        Pp["Pump (+)"]
+        Pm["Pump (-)"]
+        Diode["1N4007"]
+        Mg["MOSFET Gate"]
+        Md["MOSFET Drain"]
+        Ms["MOSFET Source"]
+    end
+
+    CHG -->|"+5V"| VU
+    CHG -->|GND| GND
+    D0 -.->|"jumper"| RST
+
+    V3V3 --> rVCC
+    GND --> rGND
+    D2 --> rSDA
+    D1 --> rSCL
+
+    D6 -->|"1kΩ"| Mg
+    Mg -.->|"100kΩ pulldown"| GND
+    Ms --> GND
+    VU --> Pp
+    Pm --> Md
+    Pp -.-> Diode
+    Diode -.-> Pm
+```
+
+### Помпа + MOSFET (детальніше)
+
+```
+   +5V (VU)
+      │
+      ├─────────────►   Pump (+) ◄── катод 1N4007
+      │                                  │
+      │                                  ▼
+      │                 Pump (-) ◄── анод 1N4007
+      │                     │            (flyback: під час "штатної"
+      │                     ▼             роботи діод reverse-biased,
+      │                MOSFET Drain        провідить лише викид, коли
+      │                     │              транзистор закривається)
+      │                     ┌─┐
+      │                     │ │ N-MOSFET (low-side)
+      │                     └─┘
+      │                  ┌──┴──┐
+      │           Source │     │ Gate ◄─ 1kΩ ◄─ D6 (GPIO12)
+      │                  └──┬──┘                     │
+      │                     │                        ▼
+      │                     ▼                      100kΩ
+      └────────────────────►GND ◄────────────────────┘
+```
+
+### Критичні нюанси
+
+- **Jumper D0 ↔ RST.** Без нього ESP не прокинеться з deep sleep. Якщо хочете і далі прошивати плату через USB після розводки — поставте Schottky-діод (катод → RST, анод → D0) замість прямої перемички, щоб не блокувати DTR-reset з UART.
+- **Pulldown 100 кΩ на gate.** Перші ~50 мс після power-on GPIO12 у high-impedance, MOSFET може відкритись від наводки. Pulldown гарантовано тримає gate низьким, поки прошивка не виставить пін явно.
+- **Flyback-діод 1N4007.** Помпа — індуктивне навантаження. Без діода MOSFET ризикує пробитись від reverse-EMF при вимиканні. Катод діода → +5V (Pump+), анод → GND-сторона котушки (Pump–).
+- **Логічний рівень MOSFET.** ESP8266 GPIO видає 3.3 В. Беріть N-MOSFET з Vgs(th) ≤ 2.5 В: **AO3400** (SMD, до 5 А), **IRLZ44N** (DIP, до 47 А), **2N7000** (TO-92, до 200 мА — обережно зі струмом помпи), **AO3416**. **НЕ** беріть IRF540 / IRFZ44 без суфікса L — вони не відкриваються від 3.3 В.
+- **Спільна земля.** GND плати заряду, GND NodeMCU, source MOSFET — все на одну точку, інакше ADC і I2C ловлять шум.
+- **A0 наразі не задіяний.** Коли підключатимете дільник для вимірювання батареї — пам'ятайте, що NodeMCU V3 LoLin вже має на борту дільник 100k:220k, тому максимум на A0-pin плати — 3.3 В.
 
 ## 1. Налаштування web-app
 
