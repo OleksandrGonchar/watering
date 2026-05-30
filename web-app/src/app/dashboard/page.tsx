@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { DeviceCard } from "@/components/DeviceCard";
 import { Button } from "@/components/ui/button";
+import { getCurrentUserId } from "@/lib/auth";
 
 export default async function DashboardPage() {
-  const { userId } = await auth();
+  const userId = await getCurrentUserId();
   if (!userId) {
     redirect("/sign-in");
   }

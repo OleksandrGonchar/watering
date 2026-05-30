@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserId } from "@/lib/auth";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -15,7 +15,7 @@ async function getOwnedDeviceOr404(
 }
 
 export async function GET(_req: NextRequest, ctx: RouteCtx) {
-  const { userId } = await auth();
+  const userId = await getCurrentUserId();
   if (!userId) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -57,7 +57,7 @@ const putSchema = z.object({
 });
 
 export async function PUT(req: NextRequest, ctx: RouteCtx) {
-  const { userId } = await auth();
+  const userId = await getCurrentUserId();
   if (!userId) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

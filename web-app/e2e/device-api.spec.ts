@@ -227,9 +227,14 @@ test.describe("POST /api/device/refresh", () => {
 });
 
 test.describe("Public marketing pages", () => {
-  test("home renders for anonymous user", async ({ page }) => {
-    await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Smart Watering" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Увійти" })).toBeVisible();
+  test("home or dashboard renders Ukrainian copy via SSR", async ({ request }) => {
+    const r = await request.get("/");
+    expect(r.status()).toBe(200);
+    const html = await r.text();
+    expect(html).toContain("Smart Watering");
+    // Either landing page (Clerk mode, no session) or dashboard (local mode).
+    const hasLanding = html.includes("Увійти") && html.includes("Створити акаунт");
+    const hasDashboard = html.includes("Мої пристрої");
+    expect(hasLanding || hasDashboard).toBe(true);
   });
 });

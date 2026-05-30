@@ -1,4 +1,6 @@
+import { NextResponse } from "next/server";
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { isLocalAuthMode } from "@/lib/authMode";
 
 const isPublicRoute = createRouteMatcher([
   "/",
@@ -7,11 +9,17 @@ const isPublicRoute = createRouteMatcher([
   "/api/device/(.*)",
 ]);
 
-export default clerkMiddleware(async (auth, req) => {
+const clerkProtect = clerkMiddleware(async (auth, req) => {
   if (!isPublicRoute(req)) {
     await auth.protect();
   }
 });
+
+export default isLocalAuthMode()
+  ? function localPassthrough() {
+      return NextResponse.next();
+    }
+  : clerkProtect;
 
 export const config = {
   matcher: [

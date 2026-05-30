@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
+import { isLocalAuthMode } from "@/lib/authMode";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,13 +13,10 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <ClerkProvider>
-      <html lang="uk">
-        <body className="min-h-screen bg-background antialiased">
-          {children}
-        </body>
-      </html>
-    </ClerkProvider>
+  const html = (
+    <html lang="uk">
+      <body className="min-h-screen bg-background antialiased">{children}</body>
+    </html>
   );
+  return isLocalAuthMode() ? html : <ClerkProvider>{html}</ClerkProvider>;
 }

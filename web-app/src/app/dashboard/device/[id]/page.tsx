@@ -1,18 +1,18 @@
 import Link from "next/link";
-import { auth } from "@clerk/nextjs/server";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScheduleEditor } from "@/components/ScheduleEditor";
 import { formatLocalIsoForDevice } from "@/lib/timezone";
+import { getCurrentUserId } from "@/lib/auth";
 
 export default async function DevicePage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { userId } = await auth();
+  const userId = await getCurrentUserId();
   if (!userId) {
     redirect("/sign-in");
   }

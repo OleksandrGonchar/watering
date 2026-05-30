@@ -46,13 +46,37 @@
 ```bash
 pnpm install
 cp web-app/.env.example web-app/.env
-# заповнити DATABASE_URL, CLERK_*, DEVICE_JWT_SECRET (>= 32 символи)
+# заповнити DATABASE_URL, DEVICE_JWT_SECRET (>= 32 символи)
+# опційно: AUTH_MODE=local (без Clerk) або CLERK_* keys
 
 pnpm db:migrate     # створити таблиці у Postgres
 pnpm dev            # http://localhost:3000
 ```
 
 `DEVICE_JWT_SECRET` згенеруйте через `openssl rand -hex 32`.
+
+### Auth mode
+
+Веб-кабінет може працювати у двох режимах:
+
+| AUTH_MODE        | Опис                                                                                                       |
+| ---------------- | ---------------------------------------------------------------------------------------------------------- |
+| `local`          | Без зовнішнього сервісу. Кожен відвідувач — це один single-user (`local-user`). Працює офлайн, без ключів. |
+| `clerk` (default) | Багатокористувацький auth через [Clerk](https://clerk.com). Потребує `pk_test_…` + `sk_test_…` і онлайн.   |
+
+Для локальної розробки чи self-hosted single-user інсталяції простіше:
+
+```env
+AUTH_MODE=local
+```
+
+UI у цьому режимі: `/sign-in` та `/sign-up` редіректять на `/dashboard`,
+у хедері замість `<UserButton/>` бейдж «Local mode». Усі дашборд-сторінки
+й API працюють, дані пристроїв прив'язуються до фіксованого `local-user`.
+
+Для Vercel-деплою / production з кількома користувачами — використайте
+`AUTH_MODE=clerk` (або просто видаліть `AUTH_MODE`) і налаштуйте Clerk
+як описано у розділі 5.
 
 ## 2. Provisioning нового пристрою
 
@@ -370,6 +394,15 @@ pnpm test:e2e:clean
 - Clerk у тестах не потрібен: усі `/api/device/*` ендпоінти публічні
   (їх ловить device-side JWT, не Clerk middleware), тому dummy-ключі Clerk
   у `.env` не блокують API-тести.
+
+> **Нюанс під Colima/Lima на macOS:** якщо ви запускаєте Postgres через
+> Colima, її DNS-форвардер може переламати резолвер у Playwright Chromium
+> (помилка `ERR_NAME_NOT_RESOLVED` навіть на `127.0.0.1`). У наших тестах ми
+> навмисно НЕ використовуємо `page.goto()` для маркетингової сторінки — той
+> самий рендер перевіряємо через `request.get()` (Node-side HTTP). Якщо
+> додаватимете нові UI-тести, що ходять через `page`, краще запускати
+> Postgres локально (`brew install postgresql@16`) або використати
+> Docker Desktop замість Colima.
 
 ### 6.4. Що ще можна додати
 

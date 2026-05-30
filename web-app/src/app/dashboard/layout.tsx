@@ -1,7 +1,19 @@
 import Link from "next/link";
-import { UserButton } from "@clerk/nextjs";
+import { isLocalAuthMode } from "@/lib/authMode";
 
-export default function DashboardLayout({
+async function HeaderRight() {
+  if (isLocalAuthMode()) {
+    return (
+      <span className="rounded-full border border-dashed px-3 py-1 text-xs text-muted-foreground">
+        Local mode
+      </span>
+    );
+  }
+  const { UserButton } = await import("@clerk/nextjs");
+  return <UserButton afterSignOutUrl="/" />;
+}
+
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -13,7 +25,7 @@ export default function DashboardLayout({
           <Link href="/dashboard" className="font-semibold">
             Smart Watering
           </Link>
-          <UserButton afterSignOutUrl="/" />
+          <HeaderRight />
         </div>
       </header>
       <main className="container mx-auto px-4 py-8">{children}</main>
