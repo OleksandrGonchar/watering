@@ -60,13 +60,13 @@
 
   <!-- ===================== PUMP + MOSFET ===================== -->
   <rect x="700" y="370" width="230" height="200" rx="10" fill="#f0fff4" stroke="#43a047" stroke-width="2"/>
-  <text x="815" y="396" text-anchor="middle" font-size="14" font-weight="700" fill="#2e7d32">Pump + MOSFET</text>
+  <text x="815" y="396" text-anchor="middle" font-size="14" font-weight="700" fill="#2e7d32">Pump + NPN switch</text>
   <text x="815" y="414" text-anchor="middle" font-size="11" fill="#2e7d32">low-side switch</text>
-  <text x="815" y="470" text-anchor="middle" font-size="11" fill="#333">N-MOSFET (logic-level)</text>
-  <text x="815" y="488" text-anchor="middle" font-size="11" fill="#333">1k gate, 100k pulldown</text>
-  <text x="815" y="506" text-anchor="middle" font-size="11" fill="#333">1N4007 flyback || pump</text>
+  <text x="815" y="470" text-anchor="middle" font-size="11" fill="#333">NPN S8050 / BC337</text>
+  <text x="815" y="488" text-anchor="middle" font-size="11" fill="#333">220R base, 10k pulldown</text>
+  <text x="815" y="506" text-anchor="middle" font-size="11" fill="#333">SB10100 flyback || pump</text>
   <circle cx="700" cy="432" r="4.5" fill="#00897b"/>
-  <text x="712" y="436" font-size="12" font-weight="600" fill="#2e7d32">Gate</text>
+  <text x="712" y="436" font-size="12" font-weight="600" fill="#2e7d32">Base (220R)</text>
   <circle cx="700" cy="540" r="4.5" fill="#e53935"/>
   <text x="712" y="544" font-size="12" font-weight="600" fill="#2e7d32">+5V -&gt; Pump(+)</text>
 
@@ -92,7 +92,7 @@
   <polyline points="570,375 630,375 630,432 700,432" fill="none" stroke="#00897b" stroke-width="2.5"/>
   <!-- GND(right) -> pump source -->
   <polyline points="570,330 590,330 590,558 815,558" fill="none" stroke="#424242" stroke-width="2.5"/>
-  <text x="700" y="554" text-anchor="middle" font-size="11" fill="#424242">Source / Pump(-) -&gt; GND</text>
+  <text x="700" y="554" text-anchor="middle" font-size="11" fill="#424242">Emitter / Pump(-) -&gt; GND</text>
   <!-- D0 <-> RST jumper -->
   <polyline points="570,450 605,450 605,490 570,490" fill="none" stroke="#9e9e9e" stroke-width="2.5" stroke-dasharray="6 4"/>
   <text x="612" y="474" font-size="11" font-weight="600" fill="#616161">jumper (wake)</text>
@@ -109,7 +109,7 @@
   <line x1="56" y1="496" x2="86" y2="496" stroke="#1e88e5" stroke-width="3"/>
   <text x="96" y="500" font-size="12" fill="#333">D1 -&gt; CLK   /   <tspan fill="#43a047">D2 -&gt; DAT</tspan></text>
   <line x1="56" y1="520" x2="86" y2="520" stroke="#8e24aa" stroke-width="3"/>
-  <text x="96" y="524" font-size="12" fill="#333">D5 -&gt; RST(CE)  /  <tspan fill="#00897b">D6 -&gt; Gate</tspan></text>
+  <text x="96" y="524" font-size="12" fill="#333">D5 -&gt; RST(CE)  /  <tspan fill="#00897b">D6 -&gt; Base</tspan></text>
   <line x1="56" y1="544" x2="86" y2="544" stroke="#9e9e9e" stroke-width="3" stroke-dasharray="6 4"/>
   <text x="96" y="548" font-size="12" fill="#333">D0 &lt;-&gt; RST (deep-sleep jumper)</text>
 </svg>

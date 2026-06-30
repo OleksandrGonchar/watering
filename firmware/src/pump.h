@@ -5,7 +5,8 @@
 
 namespace pump {
 
-// GPIO12 / D6 — gate of the N-channel logic-level MOSFET.
+// GPIO12 / D6 — drives the base of the NPN low-side switch (via 220R).
+// HIGH = transistor saturated = pump ON.
 constexpr uint8_t PIN = 12;
 
 void begin();
