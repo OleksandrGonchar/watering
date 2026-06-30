@@ -23,16 +23,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
 
-  const rotated = await rotateRefreshToken(parsed.data.refreshToken);
-  if (!rotated) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  try {
+    const rotated = await rotateRefreshToken(parsed.data.refreshToken);
+    if (!rotated) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
+
+    const accessToken = await signAccessToken(rotated.deviceId);
+
+    return NextResponse.json({
+      accessToken,
+      refreshToken: rotated.newRefreshToken,
+      accessExpiresInSec: TOKEN_TTL.accessSeconds,
+    });
+  } catch (err) {
+    console.error("[device/refresh] unexpected error:", err);
+    return NextResponse.json({ error: "server_error" }, { status: 500 });
   }
-
-  const accessToken = await signAccessToken(rotated.deviceId);
-
-  return NextResponse.json({
-    accessToken,
-    refreshToken: rotated.newRefreshToken,
-    accessExpiresInSec: TOKEN_TTL.accessSeconds,
-  });
 }

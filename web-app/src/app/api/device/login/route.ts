@@ -26,18 +26,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
 
-  const { deviceId, username, password } = parsed.data;
-  const verification = await verifyDeviceCredentials(deviceId, username, password);
-  if (!verification.ok) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  try {
+    const { deviceId, username, password } = parsed.data;
+    const verification = await verifyDeviceCredentials(deviceId, username, password);
+    if (!verification.ok) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
+
+    const accessToken = await signAccessToken(deviceId);
+    const refreshToken = await issueRefreshToken(deviceId);
+
+    return NextResponse.json({
+      accessToken,
+      refreshToken,
+      accessExpiresInSec: TOKEN_TTL.accessSeconds,
+    });
+  } catch (err) {
+    console.error("[device/login] unexpected error:", err);
+    return NextResponse.json({ error: "server_error" }, { status: 500 });
   }
-
-  const accessToken = await signAccessToken(deviceId);
-  const refreshToken = await issueRefreshToken(deviceId);
-
-  return NextResponse.json({
-    accessToken,
-    refreshToken,
-    accessExpiresInSec: TOKEN_TTL.accessSeconds,
-  });
 }

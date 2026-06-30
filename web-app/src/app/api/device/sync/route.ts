@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
 
+  try {
   const device = await prisma.device.findUnique({
     where: { id: deviceId },
     include: { schedules: { orderBy: { position: "asc" } } },
@@ -110,4 +111,8 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json(response);
+  } catch (err) {
+    console.error("[device/sync] unexpected error:", err);
+    return NextResponse.json({ error: "server_error" }, { status: 500 });
+  }
 }
