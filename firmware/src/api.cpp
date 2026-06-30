@@ -42,8 +42,8 @@ bool login(Tokens& out) {
   return parseLoginResponse(resp, out, (uint32_t)(millis() / 1000));
 }
 
-bool ensureValidToken(Tokens& tokens, uint32_t nowEpoch) {
-  if (tokens.accessToken.length() > 0 &&
+bool ensureValidToken(Tokens& tokens, uint32_t nowEpoch, bool forceRefresh) {
+  if (!forceRefresh && tokens.accessToken.length() > 0 &&
       tokens.accessExpiresAtEpoch > nowEpoch + ACCESS_TTL_GUARD_SECONDS) {
     return true;
   }
@@ -78,6 +78,7 @@ SyncResult sync(const Tokens& tokens,
                 const std::vector<schedule::PendingEvent>& pending) {
   SyncResult r{};
   r.ok = false;
+  r.unauthorized = false;
   r.nextWakeSeconds = 1800;
 
   JsonDocument req;
@@ -101,6 +102,7 @@ SyncResult sync(const Tokens& tokens,
   int status = net::httpPost("/api/device/sync", body, tokens.accessToken, resp);
   if (status != 200) {
     Serial.printf("[api] sync failed status=%d body=%s\n", status, resp.c_str());
+    r.unauthorized = (status == 401);
     return r;
   }
 

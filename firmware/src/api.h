@@ -18,10 +18,16 @@ bool login(Tokens& out);
 
 // Try refresh first; if refresh fails, fall back to full login. Updates
 // `tokens` in place on success.
-bool ensureValidToken(Tokens& tokens, uint32_t nowEpoch);
+//
+// When forceRefresh is true, the "access token still valid per local clock"
+// shortcut is skipped and a refresh/login is always attempted. Use this after
+// the server rejected a token with 401 — the device clock (DS1302) may be
+// wrong, so we must not trust it to decide token validity.
+bool ensureValidToken(Tokens& tokens, uint32_t nowEpoch, bool forceRefresh = false);
 
 struct SyncResult {
   bool ok;
+  bool unauthorized;             // true if the server rejected the token (401)
   bool claimed;
   bool configChanged;
   int configVersion;

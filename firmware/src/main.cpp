@@ -146,6 +146,17 @@ void setup() {
 
   api::SyncResult result = api::sync(tokens, configVersion, sendClaimCode, pending);
 
+  // The server rejected our access token (likely expired, or our clock is
+  // wrong and we wrongly considered it valid). Force a refresh/login that
+  // ignores the local clock, then retry once.
+  if (!result.ok && result.unauthorized) {
+    Serial.println("[main] /sync 401 — forcing token refresh and retrying");
+    if (api::ensureValidToken(tokens, nowEpoch, /*forceRefresh=*/true)) {
+      saveTokensToStorage(tokens);
+      result = api::sync(tokens, configVersion, sendClaimCode, pending);
+    }
+  }
+
   if (!result.ok) {
     Serial.println("[main] /sync failed — keeping pending events for retry");
     deepSleepFor(DEFAULT_WAKE_SECONDS);
