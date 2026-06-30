@@ -556,6 +556,13 @@ pnpm test:e2e:clean
 - **`401 unauthorized` у Serial-моніторі** — перевірте, що `DEVICE_USER`/
   `DEVICE_PASS` у `config.h` відповідають тим, що видав `provision-device`
   (пароль виводиться лише раз).
+- **`login failed status=302` (редірект на `vercel.com/sso-api`)** — на Vercel
+  увімкнено **Deployment Protection**, яка редіректить усі запити на SSO.
+  Або вимкніть її (Settings → Deployment Protection → Vercel Authentication →
+  Disabled), або згенеруйте **Protection Bypass for Automation** secret і
+  пропишіть його в `config.h` як `VERCEL_BYPASS_SECRET` — прошивка надсилає його
+  заголовком `x-vercel-protection-bypass`. Також переконайтеся, що `SERVER_URL`
+  — це `https://` (ESP не йде по http→https редіректах).
 - **Пристрій не прокидається з deep sleep** — переконайтеся, що GPIO16 (D0)
   з'єднаний з RST.
 - **`DS1302 time invalid`** — перевірте 3-дротові проводи (CLK=D1, DAT=D2,

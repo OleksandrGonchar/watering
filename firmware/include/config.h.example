@@ -18,4 +18,11 @@
 // Base URL of the deployed Next.js web-app. No trailing slash.
 #define SERVER_URL   "https://your-app.vercel.app"
 
+// Optional: Vercel Deployment Protection bypass secret.
+// Vercel → Project → Settings → Deployment Protection → "Protection Bypass for
+// Automation" → generate the secret and paste it here. Sent as the
+// x-vercel-protection-bypass header on every request so the device can reach
+// protected deployments. Leave commented out if protection is disabled.
+// #define VERCEL_BYPASS_SECRET  "your-automation-bypass-secret"
+
 #endif

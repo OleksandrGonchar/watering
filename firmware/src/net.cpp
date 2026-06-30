@@ -65,6 +65,11 @@ int httpPost(const String& path,
   if (bearerToken.length() > 0) {
     http.addHeader("Authorization", "Bearer " + bearerToken);
   }
+#ifdef VERCEL_BYPASS_SECRET
+  // Vercel Deployment Protection — "Protection Bypass for Automation".
+  // Lets the device reach protected deployments without the SSO redirect.
+  http.addHeader("x-vercel-protection-bypass", VERCEL_BYPASS_SECRET);
+#endif
 
   int status = http.POST(body);
   respBody = http.getString();
