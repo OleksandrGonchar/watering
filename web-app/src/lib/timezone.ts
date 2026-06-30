@@ -3,7 +3,7 @@ import { formatInTimeZone } from "date-fns-tz";
 /**
  * Format a Date as a wall-clock ISO string in the given IANA timezone.
  * Example: 2026-05-30T12:01:23 (no timezone suffix — the device already
- * keeps DS3231 in its own local time).
+ * keeps its RTC in its own local time).
  */
 export function formatLocalIsoForDevice(
   date: Date,

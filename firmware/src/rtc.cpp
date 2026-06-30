@@ -1,29 +1,61 @@
 #include "rtc.h"
-#include <Wire.h>
 
+#include <ThreeWire.h>
+#include <RtcDS1302.h>
+
+// DS1302 (MH-Real-Time Clock Module-2) — 3-wire serial interface.
+//   CLK (SCLK) -> D1 / GPIO5
+//   DAT (IO)   -> D2 / GPIO4
+//   RST (CE)   -> D5 / GPIO14
+// NOTE: the module's "RST" pin is the chip-enable line of the DS1302, NOT the
+// ESP8266 reset. Do not confuse it with the D0<->RST deep-sleep jumper.
 namespace {
-RTC_DS3231 g_rtc;
+
+constexpr uint8_t DS1302_CLK = 5;   // D1
+constexpr uint8_t DS1302_DAT = 4;   // D2
+constexpr uint8_t DS1302_RST = 14;  // D5
+
+ThreeWire g_wire(DS1302_DAT, DS1302_CLK, DS1302_RST);  // (IO, SCLK, CE)
+RtcDS1302<ThreeWire> g_rtc(g_wire);
 bool g_initialized = false;
+
+// Convert a Makuna RtcDateTime into the RTClib DateTime used by the rest of
+// the firmware. RtcDateTime::Year() already returns the full year (e.g. 2026).
+DateTime toDateTime(const RtcDateTime& dt) {
+  return DateTime(dt.Year(), dt.Month(), dt.Day(),
+                  dt.Hour(), dt.Minute(), dt.Second());
+}
+
 }  // namespace
 
 namespace rtc {
 
 bool begin() {
-  Wire.begin();  // SDA=D2 (GPIO4), SCL=D1 (GPIO5)
-  if (!g_rtc.begin()) {
-    Serial.println("[rtc] DS3231 not found");
-    return false;
+  g_rtc.Begin();
+
+  // The DS1302 ships write-protected and possibly halted. Clear both so we can
+  // adjust the time and so the oscillator actually runs.
+  if (g_rtc.GetIsWriteProtected()) {
+    g_rtc.SetIsWriteProtected(false);
   }
-  if (g_rtc.lostPower()) {
-    Serial.println("[rtc] DS3231 lost power, time may be wrong until first sync");
+  if (!g_rtc.GetIsRunning()) {
+    Serial.println("[rtc] DS1302 was halted, starting oscillator");
+    g_rtc.SetIsRunning(true);
   }
+
+  if (!g_rtc.IsDateTimeValid()) {
+    // Battery/cap empty or first power-on: time is bogus until the first
+    // server sync corrects it.
+    Serial.println("[rtc] DS1302 time invalid, will rely on first server sync");
+  }
+
   g_initialized = true;
   return true;
 }
 
 DateTime now() {
   if (!g_initialized) return DateTime((uint32_t)0);
-  return g_rtc.now();
+  return toDateTime(g_rtc.GetDateTime());
 }
 
 bool applyServerLocalTime(const String& iso) {
@@ -38,13 +70,14 @@ bool applyServerLocalTime(const String& iso) {
   int second = iso.substring(17, 19).toInt();
   if (year < 2024 || month < 1 || month > 12) return false;
 
-  DateTime serverTime(year, month, day, hour, minute, second);
-  DateTime current = g_rtc.now();
-  long drift = (long)serverTime.unixtime() - (long)current.unixtime();
+  RtcDateTime serverTime(year, month, day, hour, minute, second);
+  RtcDateTime current = g_rtc.GetDateTime();
+  long drift = (long)serverTime.Epoch32Time() - (long)current.Epoch32Time();
   if (drift < 0) drift = -drift;
 
-  if (drift > 30) {
-    g_rtc.adjust(serverTime);
+  if (drift > 30 || !g_rtc.IsDateTimeValid()) {
+    if (g_rtc.GetIsWriteProtected()) g_rtc.SetIsWriteProtected(false);
+    g_rtc.SetDateTime(serverTime);
     Serial.printf("[rtc] adjusted by %ld seconds\n", drift);
     return true;
   }

@@ -3,7 +3,7 @@
 // Lifecycle (everything happens in setup(); loop() is empty because the chip
 // goes into deep sleep at the very end):
 //
-//   1. Init Serial, LittleFS, DS3231, pump GPIO.
+//   1. Init Serial, LittleFS, DS1302 RTC, pump GPIO.
 //   2. Load persisted config (schedules), state (last_run_date per schedule),
 //      tokens, and pending events.
 //   3. For each schedule, run the catch-up algorithm: if it's past the
@@ -11,7 +11,7 @@
 //      breaker is satisfied, water now. Append a PendingEvent.
 //   4. Connect Wi-Fi (skipped only on RTC failure or no schedules at all).
 //   5. POST /sync with current configVersion + pending events. On 401, refresh
-//      tokens and retry. On configChanged, persist new schedules. Sync DS3231
+//      tokens and retry. On configChanged, persist new schedules. Sync DS1302
 //      from currentLocalTime.
 //   6. Save state, clear pending events on success, deep-sleep for
 //      nextWakeSeconds (capped at 70 minutes per ESP.deepSleep call).

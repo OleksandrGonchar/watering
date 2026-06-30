@@ -2,11 +2,12 @@
 #define WATERING_RTC_H
 
 #include <Arduino.h>
-#include <RTClib.h>
+#include <RTClib.h>  // only for the standalone DateTime value type
 
 namespace rtc {
 
-// Initialize I2C and DS3231. Returns false if RTC is missing/lost-power.
+// Initialize the DS1302 (3-wire). Clears write-protect and starts the
+// oscillator if it was halted. Returns false only if the module is absent.
 bool begin();
 
 // Current time as DateTime (local time of the device's timezone — RTC is
