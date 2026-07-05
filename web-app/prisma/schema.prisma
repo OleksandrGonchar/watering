@@ -41,6 +41,7 @@ model Device {
   schedules      Schedule[]
   refreshTokens  DeviceRefreshToken[]
   wateringEvents WateringEvent[]
+  alerts         DeviceAlert[]
 
   @@index([credentialId])
   @@index([ownerId])
@@ -53,6 +54,7 @@ model Schedule {
   timeLocal       String
   durationSeconds Int
   position        Int
+  type            String @default("watering") // "watering" | "humidifier"
 
   @@index([deviceId])
 }
@@ -76,6 +78,25 @@ model WateringEvent {
   scheduleId      Int?
   durationSeconds Int
   wateredAt       DateTime
+  type            String   @default("watering") // "watering" | "humidifier"
 
   @@index([deviceId, wateredAt])
+}
+
+// Water-safety alerts reported by the device. Rows are never deleted so the
+// history stays available for analysis; instead a banner is considered active
+// while its "closing" timestamp is null:
+//   overflow  -> active until acknowledgedAt is set (user presses the button)
+//   low_water -> active until resolvedAt is set (water refilled, reed opens)
+model DeviceAlert {
+  id             Int       @id @default(autoincrement())
+  deviceId       String
+  device         Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  type           String    // "overflow" | "low_water"
+  sensorIndex    Int?      // 1|2 for overflow, null for low_water
+  createdAt      DateTime  @default(now())
+  acknowledgedAt DateTime?
+  resolvedAt     DateTime?
+
+  @@index([deviceId, createdAt])
 }

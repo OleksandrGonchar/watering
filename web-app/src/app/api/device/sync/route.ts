@@ -11,13 +11,87 @@ const wateringEventSchema = z.object({
   scheduleId: z.number().int().nullable().optional(),
   durationSeconds: z.number().int().min(0).max(3600),
   wateredAt: z.string().min(10),
+  type: z.enum(["watering", "humidifier"]).optional(),
 });
+
+const alertsSchema = z
+  .object({
+    overflow: z
+      .object({
+        active: z.boolean(),
+        sensors: z.array(z.number().int().min(1).max(2)).max(2).optional(),
+      })
+      .optional(),
+    lowWater: z.object({ active: z.boolean() }).optional(),
+    ackOverflow: z.boolean().optional(),
+  })
+  .optional();
 
 const bodySchema = z.object({
   configVersion: z.number().int().min(0),
   claimCode: z.string().min(1).max(64).optional(),
   events: z.array(wateringEventSchema).max(50).optional(),
+  alerts: alertsSchema,
 });
+
+type AlertsPayload = z.infer<typeof alertsSchema>;
+
+// Idempotently reconcile the device-reported alert state into DeviceAlert rows.
+// The device re-reports its live state every sync, so we only create a row when
+// there isn't already an open one, and close open rows when the condition
+// clears. Rows are never deleted, keeping the full history.
+async function reconcileAlerts(deviceId: string, alerts: AlertsPayload) {
+  if (!alerts) return;
+
+  // Overflow acknowledgement (button pressed on the device): hide the red
+  // banner by stamping acknowledgedAt on every still-open overflow row.
+  if (alerts.ackOverflow) {
+    await prisma.deviceAlert.updateMany({
+      where: { deviceId, type: "overflow", acknowledgedAt: null },
+      data: { acknowledgedAt: new Date() },
+    });
+  }
+
+  if (alerts.overflow?.active) {
+    const sensors =
+      alerts.overflow.sensors && alerts.overflow.sensors.length > 0
+        ? alerts.overflow.sensors
+        : [null];
+    for (const sensorIndex of sensors) {
+      const open = await prisma.deviceAlert.findFirst({
+        where: {
+          deviceId,
+          type: "overflow",
+          sensorIndex: sensorIndex ?? null,
+          acknowledgedAt: null,
+        },
+      });
+      if (!open) {
+        await prisma.deviceAlert.create({
+          data: { deviceId, type: "overflow", sensorIndex: sensorIndex ?? null },
+        });
+      }
+    }
+  }
+
+  if (alerts.lowWater) {
+    if (alerts.lowWater.active) {
+      const open = await prisma.deviceAlert.findFirst({
+        where: { deviceId, type: "low_water", resolvedAt: null },
+      });
+      if (!open) {
+        await prisma.deviceAlert.create({
+          data: { deviceId, type: "low_water" },
+        });
+      }
+    } else {
+      await prisma.deviceAlert.updateMany({
+        where: { deviceId, type: "low_water", resolvedAt: null },
+        data: { resolvedAt: new Date() },
+      });
+    }
+  }
+}
 
 export async function POST(req: NextRequest) {
   const authResult = await authenticateDevice(req);
@@ -53,9 +127,13 @@ export async function POST(req: NextRequest) {
         scheduleId: e.scheduleId ?? null,
         durationSeconds: e.durationSeconds,
         wateredAt: new Date(e.wateredAt),
+        type: e.type ?? "watering",
       })),
     });
   }
+
+  // Raise / clear water-safety alerts (overflow, low water).
+  await reconcileAlerts(deviceId, parsed.data.alerts);
 
   // Try to claim the device if a claim code is provided and unclaimed.
   let claimed = device.ownerId !== null;
@@ -90,6 +168,7 @@ export async function POST(req: NextRequest) {
       timeLocal: string;
       durationSeconds: number;
       position: number;
+      type: string;
     }>;
     currentLocalTime: string;
     nextWakeSeconds: number;
@@ -107,6 +186,7 @@ export async function POST(req: NextRequest) {
       timeLocal: s.timeLocal,
       durationSeconds: s.durationSeconds,
       position: s.position,
+      type: s.type,
     }));
   }
 

@@ -59,4 +59,8 @@ bool loadPending(JsonDocument& out) { return readJson("/pending.json", out); }
 bool savePending(const JsonDocument& doc) { return writeJson("/pending.json", doc); }
 bool clearPending() { return removeIfExists("/pending.json"); }
 
+bool loadAlerts(JsonDocument& out) { return readJson("/alerts.json", out); }
+bool saveAlerts(const JsonDocument& doc) { return writeJson("/alerts.json", doc); }
+bool clearAlerts() { return removeIfExists("/alerts.json"); }
+
 }  // namespace storage

@@ -1,6 +1,8 @@
 #include "schedule.h"
 #include "pump.h"
+#include "humidifier.h"
 #include "rtc.h"
+#include "sensors.h"
 
 namespace schedule {
 
@@ -15,6 +17,15 @@ bool parseHHMM(const char* s, int& h, int& m) {
   return h >= 0 && h <= 23 && m >= 0 && m <= 59;
 }
 
+Kind parseKind(const char* s) {
+  return (s && strcmp(s, "humidifier") == 0) ? Kind::Humidifier
+                                             : Kind::Watering;
+}
+
+const char* kindToString(Kind k) {
+  return k == Kind::Humidifier ? "humidifier" : "watering";
+}
+
 }  // namespace
 
 bool parseConfig(const JsonDocument& doc, std::vector<Schedule>& out, int& out_version) {
@@ -27,6 +38,7 @@ bool parseConfig(const JsonDocument& doc, std::vector<Schedule>& out, int& out_v
     Schedule s;
     s.id = o["id"].as<int>();
     s.durationSeconds = o["durationSeconds"].as<int>();
+    s.kind = parseKind(o["type"].as<const char*>());
     int h, m;
     if (!parseHHMM(o["timeLocal"].as<const char*>(), h, m)) continue;
     s.hour = h;
@@ -47,6 +59,7 @@ void serializeConfig(JsonDocument& doc, int version, const std::vector<Schedule>
     snprintf(hhmm, sizeof(hhmm), "%02d:%02d", s.hour, s.minute);
     o["timeLocal"] = hhmm;
     o["durationSeconds"] = s.durationSeconds;
+    o["type"] = kindToString(s.kind);
   }
 }
 
@@ -83,6 +96,7 @@ void parsePending(const JsonDocument& doc, std::vector<PendingEvent>& out) {
     e.scheduleId = o["scheduleId"].as<int>();
     e.durationSeconds = o["durationSeconds"].as<uint32_t>();
     e.wateredAtIso = o["wateredAtIso"].as<const char*>() ?: "";
+    e.kind = parseKind(o["type"].as<const char*>());
     out.push_back(e);
   }
 }
@@ -95,13 +109,15 @@ void serializePending(JsonDocument& doc, const std::vector<PendingEvent>& events
     o["scheduleId"] = e.scheduleId;
     o["durationSeconds"] = e.durationSeconds;
     o["wateredAtIso"] = e.wateredAtIso;
+    o["type"] = kindToString(e.kind);
   }
 }
 
 void runDueSchedules(const DateTime& now,
                      const std::vector<Schedule>& schedules,
                      std::map<int, ScheduleStateEntry>& state,
-                     std::vector<PendingEvent>& pending) {
+                     std::vector<PendingEvent>& pending,
+                     RunOutcome& outcome) {
   String today = rtc::toDateString(now);
   uint32_t nowEpoch = now.unixtime();
 
@@ -122,19 +138,43 @@ void runDueSchedules(const DateTime& now,
       }
     }
 
-    Serial.printf("[schedule] running id=%d for %d s\n", s.id, s.durationSeconds);
-    pump::run(s.durationSeconds);
+    // Never start an actuator if a leak/overflow sensor is already tripped.
+    if (sensors::overflowMask() != 0) {
+      outcome.overflow = true;
+      outcome.overflowSensors = sensors::overflowMask();
+      Serial.println("[schedule] leak detected before run — skipping all runs");
+      return;
+    }
+
+    Serial.printf("[schedule] running id=%d (%s) for %d s\n", s.id,
+                  s.kind == Kind::Humidifier ? "humidifier" : "watering",
+                  s.durationSeconds);
+    // Both actuators cut out the instant a leak sensor trips.
+    auto leakAbort = []() { return sensors::overflowMask() != 0; };
+    uint32_t t0 = millis();
+    bool aborted = (s.kind == Kind::Humidifier)
+                       ? humidifier::run(s.durationSeconds, leakAbort)
+                       : pump::run(s.durationSeconds, leakAbort);
+    uint32_t elapsedSec = (millis() - t0 + 500) / 1000;
 
     PendingEvent ev;
     ev.scheduleId = s.id;
-    ev.durationSeconds = s.durationSeconds;
+    ev.durationSeconds = aborted ? elapsedSec : (uint32_t)s.durationSeconds;
     ev.wateredAtIso = rtc::toLocalIso(now);
+    ev.kind = s.kind;
     pending.push_back(ev);
 
     ScheduleStateEntry e;
     e.lastRunDate = today;
     e.lastRunEpoch = nowEpoch;
     state[s.id] = e;
+
+    if (aborted) {
+      outcome.overflow = true;
+      outcome.overflowSensors = sensors::overflowMask();
+      Serial.println("[schedule] leak during run — skipping remaining runs");
+      return;
+    }
   }
 }
 

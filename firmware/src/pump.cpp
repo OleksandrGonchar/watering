@@ -7,16 +7,22 @@ void begin() {
   digitalWrite(PIN, LOW);
 }
 
-void run(uint32_t seconds) {
+bool run(uint32_t seconds, std::function<bool()> shouldAbort) {
   Serial.printf("[pump] ON for %u s\n", seconds);
   digitalWrite(PIN, HIGH);
+  bool aborted = false;
   uint32_t end = millis() + seconds * 1000UL;
   while ((int32_t)(end - millis()) > 0) {
+    if (shouldAbort && shouldAbort()) {
+      aborted = true;
+      break;
+    }
     delay(50);
     yield();
   }
   digitalWrite(PIN, LOW);
-  Serial.println("[pump] OFF");
+  Serial.println(aborted ? "[pump] ABORTED (overflow)" : "[pump] OFF");
+  return aborted;
 }
 
 }  // namespace pump

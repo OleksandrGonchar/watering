@@ -25,4 +25,71 @@
 // protected deployments. Leave commented out if protection is disabled.
 // #define VERCEL_BYPASS_SECRET  "your-automation-bypass-secret"
 
+// ===========================================================================
+// Water-safety + indicators + humidifier
+// ===========================================================================
+//
+// Peripherals: 2 leak/overflow plate sensors, a magnetic float / reed
+// low-water switch, an acknowledge button, the watering pump (D6/GPIO12), a
+// humidifier output, and two indicator LEDs (red = overflow, blue = low water).
+//
+// DEFAULT wiring (Variant A): everything on bare NodeMCU GPIO, no extra IC.
+// Because the ESP8266 is pin-constrained, the reed switch and the button share
+// A0 through a small resistor ladder, and Serial runs TX-only (see main.cpp)
+// so RX/GPIO3 is free to drive the blue LED.
+//
+// OPTIONAL upgrade: define WATERING_USE_PCF8574 to move the sensors/LEDs/button
+// onto a PCF8574 I2C expander. That frees A0 + Serial RX and leaves spare lines
+// for a future lamp/switch. See README.
+// #define WATERING_USE_PCF8574
+
+// Humidifier output (driven via a MOSFET/relay). ESP-direct in BOTH wiring
+// modes; runs only while the board is awake, so no latch is needed.
+#define PIN_HUMIDIFIER  15            // D8 / GPIO15 (LOW at boot = driver off)
+
+#ifdef WATERING_USE_PCF8574
+  #define PCF8574_ADDR    0x20        // A0..A2 tied to GND
+  #define I2C_SDA_PIN     0           // D3 / GPIO0  (idle-HIGH, boot-safe)
+  #define I2C_SCL_PIN     2           // D4 / GPIO2  (idle-HIGH, boot-safe)
+  // Expander pins P0..P5:
+  #define PIN_OVERFLOW_1  0           // P0 (input)
+  #define PIN_OVERFLOW_2  1           // P1 (input)
+  #define PIN_LOW_WATER   2           // P2 (input, reed switch)
+  #define PIN_LED_RED     3           // P3 (output)
+  #define PIN_LED_BLUE    4           // P4 (output)
+  #define PIN_ACK_BUTTON  5           // P5 (input, button to GND)
+  // LEDs on a PCF8574 are wired active-low (pin sinks current to the LED).
+  #define LED_ON_LEVEL    LOW
+  #define LED_OFF_LEVEL   HIGH
+#else
+  // --- Variant A: bare NodeMCU GPIO (default) ---
+  #define PIN_OVERFLOW_1  0           // D3 / GPIO0  (leak sensor 1)
+  #define PIN_OVERFLOW_2  2           // D4 / GPIO2  (leak sensor 2)
+  #define PIN_LED_RED     13          // D7 / GPIO13
+  #define PIN_LED_BLUE    3           // RX / GPIO3  (freed via SERIAL_TX_ONLY)
+  // Reed switch + acknowledge button share A0 through a resistor ladder.
+  // analogRead(A0) is 0..1023; a closed contact pulls the line toward GND, so
+  // lower readings mean "active". Tune the resistors to hit these bands:
+  #define REED_BUTTON_ON_ADC
+  #define ADC_BOTH_MAX    180         // adc <  180        -> reed AND button
+  #define ADC_BUTTON_MAX  500         // 180 <= adc < 500  -> button only
+  #define ADC_REED_MAX    850         // 500 <= adc < 850  -> reed only
+                                      // adc >= 850        -> none
+  // LEDs on direct GPIO are wired active-high (pin -> resistor -> LED -> GND).
+  #define LED_ON_LEVEL    HIGH
+  #define LED_OFF_LEVEL   LOW
+#endif
+
+// Digital leak/reed/button contacts read active-low by default (a closed
+// contact pulls the line to GND). Set to 1 if yours drive the line HIGH.
+// (Does not apply to the A0 ladder, which is inherently pull-to-GND.)
+#define SENSOR_ACTIVE_HIGH      0
+
+// LED blink half-period in milliseconds.
+#define LED_BLINK_INTERVAL_MS   500
+
+// After a low-water wake, keep the blue LED blinking at least this long before
+// the device returns to deep sleep. Default 1 minute.
+#define LOW_WATER_MIN_BLINK_MS  60000UL
+
 #endif

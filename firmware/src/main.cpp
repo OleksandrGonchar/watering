@@ -25,7 +25,10 @@
 #include "storage.h"
 #include "rtc.h"
 #include "pump.h"
+#include "humidifier.h"
 #include "schedule.h"
+#include "sensors.h"
+#include "alerts.h"
 #include "net.h"
 #include "api.h"
 
@@ -59,16 +62,42 @@ void saveTokensToStorage(const api::Tokens& t) {
   storage::saveTokens(doc);
 }
 
+void loadAlertSnapshot(bool& overflow, uint8_t& overflowSensors, bool& lowWater) {
+  JsonDocument doc;
+  if (!storage::loadAlerts(doc)) return;
+  if (doc["overflow"].as<bool>()) {
+    overflow = true;
+    overflowSensors |= doc["overflowSensors"].as<uint8_t>();
+  }
+  if (doc["lowWater"].as<bool>()) lowWater = true;
+}
+
+void saveAlertSnapshot(bool overflow, uint8_t overflowSensors, bool lowWater) {
+  if (!overflow && !lowWater) {
+    storage::clearAlerts();
+    return;
+  }
+  JsonDocument doc;
+  doc["overflow"] = overflow;
+  doc["overflowSensors"] = overflowSensors;
+  doc["lowWater"] = lowWater;
+  storage::saveAlerts(doc);
+}
+
 }  // namespace
 
 void setup() {
-  Serial.begin(115200);
+  // TX-only UART: we never read Serial input, and freeing RX/GPIO3 lets the
+  // bare-GPIO wiring drive the blue LED there. Logs on TX still work.
+  Serial.begin(115200, SERIAL_8N1, SERIAL_TX_ONLY);
   delay(50);
   Serial.println();
   Serial.println("==== Smart Watering boot ====");
   Serial.printf("Device: %s\n", DEVICE_ID);
 
   pump::begin();
+  humidifier::begin();
+  sensors::begin();
   bool storageOk = storage::begin();
   bool rtcOk = rtc::begin();
 
@@ -100,20 +129,47 @@ void setup() {
     if (storage::loadPending(doc)) schedule::parsePending(doc, pending);
   }
 
+  // === Water-safety alerts ===
+  // Carry forward any alert that a previous wake failed to report, then merge
+  // with the current live sensor readings.
+  bool overflowAlert = false;
+  uint8_t overflowSensors = 0;
+  bool lowWaterAlert = false;
+  loadAlertSnapshot(overflowAlert, overflowSensors, lowWaterAlert);
+
+  if (sensors::isLowWater()) lowWaterAlert = true;
+  uint8_t liveOverflow = sensors::overflowMask();
+  if (liveOverflow != 0) {
+    overflowAlert = true;
+    overflowSensors |= liveOverflow;
+  }
+
   // === Run due schedules locally (catch-up, no network needed) ===
-  if (rtcOk && !schedules.empty()) {
+  // Never water while overflowing or when the tank is empty.
+  if (rtcOk && !schedules.empty() && !overflowAlert && !lowWaterAlert) {
     DateTime now = rtc::now();
     Serial.printf("[main] now=%s, schedules=%u\n",
                   rtc::toLocalIso(now).c_str(), (unsigned)schedules.size());
-    schedule::runDueSchedules(now, schedules, state, pending);
+    schedule::RunOutcome outcome;
+    schedule::runDueSchedules(now, schedules, state, pending, outcome);
+    if (outcome.overflow) {
+      overflowAlert = true;
+      overflowSensors |= outcome.overflowSensors;
+    }
 
     JsonDocument doc;
     schedule::serializeState(doc, state);
     storage::saveState(doc);
   } else {
-    Serial.printf("[main] skipping schedules (rtcOk=%d, schedules=%u)\n",
-                  rtcOk ? 1 : 0, (unsigned)schedules.size());
+    Serial.printf(
+        "[main] skipping schedules (rtcOk=%d, schedules=%u, overflow=%d, "
+        "lowWater=%d)\n",
+        rtcOk ? 1 : 0, (unsigned)schedules.size(), overflowAlert ? 1 : 0,
+        lowWaterAlert ? 1 : 0);
   }
+
+  // Persist the alert snapshot so it survives a failed sync / reset.
+  saveAlertSnapshot(overflowAlert, overflowSensors, lowWaterAlert);
 
   if (!pending.empty()) {
     JsonDocument doc;
@@ -124,6 +180,12 @@ void setup() {
   // === Sync with server ===
   if (!net::connect()) {
     Serial.println("[main] WiFi failed — will retry next wake");
+    // Surface the alert locally even while offline (overflow can't wait).
+    if (overflowAlert) {
+      alerts::blinkRedUntilButton();
+    } else if (lowWaterAlert) {
+      alerts::blinkBlueFor(LOW_WATER_MIN_BLINK_MS);
+    }
     deepSleepFor(DEFAULT_WAKE_SECONDS);
     return;
   }
@@ -134,6 +196,11 @@ void setup() {
   uint32_t nowEpoch = rtcOk ? rtc::now().unixtime() : (millis() / 1000);
   if (!api::ensureValidToken(tokens, nowEpoch)) {
     Serial.println("[main] auth failed — will retry next wake");
+    if (overflowAlert) {
+      alerts::blinkRedUntilButton();
+    } else if (lowWaterAlert) {
+      alerts::blinkBlueFor(LOW_WATER_MIN_BLINK_MS);
+    }
     deepSleepFor(DEFAULT_WAKE_SECONDS);
     return;
   }
@@ -144,7 +211,14 @@ void setup() {
   // power-on. Server ignores it once the user has claimed.
   bool sendClaimCode = true;
 
-  api::SyncResult result = api::sync(tokens, configVersion, sendClaimCode, pending);
+  api::AlertReport alertReport;
+  alertReport.overflowActive = overflowAlert;
+  alertReport.overflowSensors = overflowSensors;
+  alertReport.lowWaterActive = lowWaterAlert;
+  alertReport.ackOverflow = false;
+
+  api::SyncResult result =
+      api::sync(tokens, configVersion, sendClaimCode, pending, alertReport);
 
   // The server rejected our access token (likely expired, or our clock is
   // wrong and we wrongly considered it valid). Force a refresh/login that
@@ -153,18 +227,27 @@ void setup() {
     Serial.println("[main] /sync 401 — forcing token refresh and retrying");
     if (api::ensureValidToken(tokens, nowEpoch, /*forceRefresh=*/true)) {
       saveTokensToStorage(tokens);
-      result = api::sync(tokens, configVersion, sendClaimCode, pending);
+      result =
+          api::sync(tokens, configVersion, sendClaimCode, pending, alertReport);
     }
   }
 
   if (!result.ok) {
     Serial.println("[main] /sync failed — keeping pending events for retry");
+    // Alert (if any) is kept in /alerts.json for the next wake. Still surface
+    // it locally so the user sees the LED even while offline.
+    if (overflowAlert) {
+      alerts::blinkRedUntilButton();
+    } else if (lowWaterAlert) {
+      alerts::blinkBlueFor(LOW_WATER_MIN_BLINK_MS);
+    }
     deepSleepFor(DEFAULT_WAKE_SECONDS);
     return;
   }
 
-  // Successful sync: clear pending queue.
+  // Successful sync: server now knows about any alert, clear the local queues.
   storage::clearPending();
+  storage::clearAlerts();
 
   // Sync RTC if drift > 30s.
   if (rtcOk && result.currentLocalTime.length() > 0) {
@@ -195,6 +278,30 @@ void setup() {
                 result.claimed ? 1 : 0,
                 result.configChanged ? 1 : 0,
                 result.nextWakeSeconds);
+
+  // === Alert indicators ===
+  if (overflowAlert) {
+    // Stay awake and blink the red LED until the user presses the button.
+    alerts::blinkRedUntilButton();
+
+    // Report the acknowledgement so the server hides the red banner (the row
+    // stays in history). Best-effort — a failure just means the banner clears
+    // on a later sync.
+    api::AlertReport ackReport;
+    ackReport.ackOverflow = true;
+    std::vector<schedule::PendingEvent> noPending;
+    api::SyncResult ackRes =
+        api::sync(tokens, configVersion, /*sendClaimCode=*/false, noPending, ackReport);
+    if (!ackRes.ok && ackRes.unauthorized &&
+        api::ensureValidToken(tokens, nowEpoch, /*forceRefresh=*/true)) {
+      saveTokensToStorage(tokens);
+      api::sync(tokens, configVersion, /*sendClaimCode=*/false, noPending, ackReport);
+    }
+    storage::clearAlerts();
+  } else if (lowWaterAlert) {
+    // Blink the blue LED for at least the configured window, then sleep.
+    alerts::blinkBlueFor(LOW_WATER_MIN_BLINK_MS);
+  }
 
   deepSleepFor(result.nextWakeSeconds);
 }

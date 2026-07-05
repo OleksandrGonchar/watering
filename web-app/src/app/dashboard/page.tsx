@@ -21,6 +21,15 @@ export default async function DashboardPage() {
     where: { ownerId: userId },
     include: {
       schedules: { select: { id: true } },
+      alerts: {
+        where: {
+          OR: [
+            { type: "overflow", acknowledgedAt: null },
+            { type: "low_water", resolvedAt: null },
+          ],
+        },
+        select: { type: true },
+      },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -55,6 +64,8 @@ export default async function DashboardPage() {
               lastSeenAt={d.lastSeenAt?.toISOString() ?? null}
               batteryPct={d.batteryPct}
               schedulesCount={d.schedules.length}
+              hasOverflow={d.alerts.some((a) => a.type === "overflow")}
+              hasLowWater={d.alerts.some((a) => a.type === "low_water")}
             />
           ))}
         </div>

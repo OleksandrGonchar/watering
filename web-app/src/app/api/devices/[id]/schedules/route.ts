@@ -28,7 +28,7 @@ export async function GET(_req: NextRequest, ctx: RouteCtx) {
 
   const schedules = await prisma.schedule.findMany({
     where: { deviceId: device.id },
-    orderBy: { position: "asc" },
+    orderBy: [{ type: "asc" }, { position: "asc" }],
   });
 
   return NextResponse.json({
@@ -39,18 +39,24 @@ export async function GET(_req: NextRequest, ctx: RouteCtx) {
       timeLocal: s.timeLocal,
       durationSeconds: s.durationSeconds,
       position: s.position,
+      type: s.type,
     })),
   });
 }
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+// Max run length differs per actuator: watering pump is short bursts, the
+// humidifier may mist for longer (the board stays awake during the run).
+const MAX_DURATION_BY_TYPE = { watering: 600, humidifier: 1800 } as const;
+
 const putSchema = z.object({
+  type: z.enum(["watering", "humidifier"]).default("watering"),
   schedules: z
     .array(
       z.object({
         timeLocal: z.string().regex(HHMM, "Use HH:MM 24h format"),
-        durationSeconds: z.number().int().min(1).max(600),
+        durationSeconds: z.number().int().min(1).max(1800),
       }),
     )
     .max(5),
@@ -83,8 +89,19 @@ export async function PUT(req: NextRequest, ctx: RouteCtx) {
     );
   }
 
+  const { type } = parsed.data;
+  const maxDuration = MAX_DURATION_BY_TYPE[type];
+  if (parsed.data.schedules.some((s) => s.durationSeconds > maxDuration)) {
+    return NextResponse.json(
+      { error: "duration_too_long", maxDuration, type },
+      { status: 400 },
+    );
+  }
+
+  // Replace only the rows of this type so the two editors (watering /
+  // humidifier) don't clobber each other.
   const result = await prisma.$transaction(async (tx) => {
-    await tx.schedule.deleteMany({ where: { deviceId: device.id } });
+    await tx.schedule.deleteMany({ where: { deviceId: device.id, type } });
     if (parsed.data.schedules.length > 0) {
       await tx.schedule.createMany({
         data: parsed.data.schedules.map((s, idx) => ({
@@ -92,13 +109,16 @@ export async function PUT(req: NextRequest, ctx: RouteCtx) {
           timeLocal: s.timeLocal,
           durationSeconds: s.durationSeconds,
           position: idx,
+          type,
         })),
       });
     }
     return tx.device.update({
       where: { id: device.id },
       data: { configVersion: { increment: 1 } },
-      include: { schedules: { orderBy: { position: "asc" } } },
+      include: {
+        schedules: { orderBy: [{ type: "asc" }, { position: "asc" }] },
+      },
     });
   });
 
@@ -110,6 +130,7 @@ export async function PUT(req: NextRequest, ctx: RouteCtx) {
       timeLocal: s.timeLocal,
       durationSeconds: s.durationSeconds,
       position: s.position,
+      type: s.type,
     })),
   });
 }

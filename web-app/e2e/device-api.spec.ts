@@ -157,6 +157,137 @@ test.describe("POST /api/device/sync", () => {
   });
 });
 
+test.describe("POST /api/device/sync — water-safety alerts", () => {
+  async function loginDevice(
+    request: import("@playwright/test").APIRequestContext,
+    device: { id: string; username: string; password: string },
+  ) {
+    const login = await request.post("/api/device/login", {
+      data: {
+        deviceId: device.id,
+        username: device.username,
+        password: device.password,
+      },
+    });
+    expect(login.status()).toBe(200);
+    const { accessToken } = await login.json();
+    return accessToken as string;
+  }
+
+  test("overflow report creates an open alert row per sensor", async ({
+    request,
+    prisma,
+    testDevice,
+  }) => {
+    const accessToken = await loginDevice(request, testDevice);
+
+    const r = await request.post("/api/device/sync", {
+      headers: { authorization: `Bearer ${accessToken}` },
+      data: {
+        configVersion: 0,
+        alerts: { overflow: { active: true, sensors: [1, 2] } },
+      },
+    });
+    expect(r.status()).toBe(200);
+
+    const alerts = await prisma.deviceAlert.findMany({
+      where: { deviceId: testDevice.id, type: "overflow" },
+      orderBy: { sensorIndex: "asc" },
+    });
+    expect(alerts).toHaveLength(2);
+    expect(alerts.map((a) => a.sensorIndex)).toEqual([1, 2]);
+    expect(alerts.every((a) => a.acknowledgedAt === null)).toBe(true);
+  });
+
+  test("repeated overflow report is idempotent (no duplicate rows)", async ({
+    request,
+    prisma,
+    testDevice,
+  }) => {
+    const accessToken = await loginDevice(request, testDevice);
+    const body = {
+      configVersion: 0,
+      alerts: { overflow: { active: true, sensors: [1] } },
+    };
+
+    await request.post("/api/device/sync", {
+      headers: { authorization: `Bearer ${accessToken}` },
+      data: body,
+    });
+    await request.post("/api/device/sync", {
+      headers: { authorization: `Bearer ${accessToken}` },
+      data: body,
+    });
+
+    const alerts = await prisma.deviceAlert.findMany({
+      where: { deviceId: testDevice.id, type: "overflow" },
+    });
+    expect(alerts).toHaveLength(1);
+  });
+
+  test("ackOverflow acknowledges open overflow alerts (banner hidden, row kept)", async ({
+    request,
+    prisma,
+    testDevice,
+  }) => {
+    const accessToken = await loginDevice(request, testDevice);
+
+    await request.post("/api/device/sync", {
+      headers: { authorization: `Bearer ${accessToken}` },
+      data: {
+        configVersion: 0,
+        alerts: { overflow: { active: true, sensors: [1] } },
+      },
+    });
+
+    const ack = await request.post("/api/device/sync", {
+      headers: { authorization: `Bearer ${accessToken}` },
+      data: {
+        configVersion: 0,
+        alerts: { overflow: { active: false }, ackOverflow: true },
+      },
+    });
+    expect(ack.status()).toBe(200);
+
+    const alerts = await prisma.deviceAlert.findMany({
+      where: { deviceId: testDevice.id, type: "overflow" },
+    });
+    // Row is kept for history but acknowledged (no longer active).
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].acknowledgedAt).not.toBeNull();
+  });
+
+  test("low water alert is created then resolved when water is restored", async ({
+    request,
+    prisma,
+    testDevice,
+  }) => {
+    const accessToken = await loginDevice(request, testDevice);
+
+    await request.post("/api/device/sync", {
+      headers: { authorization: `Bearer ${accessToken}` },
+      data: { configVersion: 0, alerts: { lowWater: { active: true } } },
+    });
+
+    let alerts = await prisma.deviceAlert.findMany({
+      where: { deviceId: testDevice.id, type: "low_water" },
+    });
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].resolvedAt).toBeNull();
+
+    await request.post("/api/device/sync", {
+      headers: { authorization: `Bearer ${accessToken}` },
+      data: { configVersion: 0, alerts: { lowWater: { active: false } } },
+    });
+
+    alerts = await prisma.deviceAlert.findMany({
+      where: { deviceId: testDevice.id, type: "low_water" },
+    });
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].resolvedAt).not.toBeNull();
+  });
+});
+
 test.describe("POST /api/device/refresh", () => {
   test("rotates refresh token; old token is then invalid", async ({
     request,

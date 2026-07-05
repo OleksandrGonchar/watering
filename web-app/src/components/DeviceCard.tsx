@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Battery, Clock, Wifi, WifiOff } from "lucide-react";
+import { AlertTriangle, Battery, Clock, Droplets, Wifi, WifiOff } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const ONLINE_THRESHOLD_MS = 3 * 60 * 60 * 1000;
@@ -21,6 +21,8 @@ interface DeviceCardProps {
   lastSeenAt: string | null;
   batteryPct: number | null;
   schedulesCount: number;
+  hasOverflow?: boolean;
+  hasLowWater?: boolean;
 }
 
 export function DeviceCard({
@@ -30,6 +32,8 @@ export function DeviceCard({
   lastSeenAt,
   batteryPct,
   schedulesCount,
+  hasOverflow = false,
+  hasLowWater = false,
 }: DeviceCardProps) {
   const seen = formatLastSeen(lastSeenAt);
 
@@ -39,11 +43,25 @@ export function DeviceCard({
         <CardHeader>
           <CardTitle className="flex items-center justify-between gap-2">
             <span className="truncate">{name ?? id}</span>
-            {seen.online ? (
-              <Wifi className="h-4 w-4 text-green-600" />
-            ) : (
-              <WifiOff className="h-4 w-4 text-muted-foreground" />
-            )}
+            <span className="flex items-center gap-1.5">
+              {hasOverflow ? (
+                <AlertTriangle
+                  className="h-4 w-4 text-red-600"
+                  aria-label="Перелив води"
+                />
+              ) : null}
+              {hasLowWater ? (
+                <Droplets
+                  className="h-4 w-4 text-blue-600"
+                  aria-label="Низький рівень води"
+                />
+              ) : null}
+              {seen.online ? (
+                <Wifi className="h-4 w-4 text-green-600" />
+              ) : (
+                <WifiOff className="h-4 w-4 text-muted-foreground" />
+              )}
+            </span>
           </CardTitle>
           <p className="truncate text-xs text-muted-foreground">{id}</p>
         </CardHeader>

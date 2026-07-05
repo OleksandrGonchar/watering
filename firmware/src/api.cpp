@@ -75,7 +75,8 @@ bool ensureValidToken(Tokens& tokens, uint32_t nowEpoch, bool forceRefresh) {
 SyncResult sync(const Tokens& tokens,
                 int configVersion,
                 bool sendClaimCode,
-                const std::vector<schedule::PendingEvent>& pending) {
+                const std::vector<schedule::PendingEvent>& pending,
+                const AlertReport& alerts) {
   SyncResult r{};
   r.ok = false;
   r.unauthorized = false;
@@ -93,8 +94,23 @@ SyncResult sync(const Tokens& tokens,
       o["scheduleId"] = e.scheduleId;
       o["durationSeconds"] = e.durationSeconds;
       o["wateredAt"] = e.wateredAtIso;
+      o["type"] = (e.kind == schedule::Kind::Humidifier) ? "humidifier"
+                                                         : "watering";
     }
   }
+
+  // Water-safety alert state (overflow / low water). Always sent so the server
+  // can raise or clear banners idempotently.
+  JsonObject alertsObj = req["alerts"].to<JsonObject>();
+  JsonObject overflowObj = alertsObj["overflow"].to<JsonObject>();
+  overflowObj["active"] = alerts.overflowActive;
+  JsonArray sensorsArr = overflowObj["sensors"].to<JsonArray>();
+  if (alerts.overflowSensors & 0x01) sensorsArr.add(1);
+  if (alerts.overflowSensors & 0x02) sensorsArr.add(2);
+  JsonObject lowWaterObj = alertsObj["lowWater"].to<JsonObject>();
+  lowWaterObj["active"] = alerts.lowWaterActive;
+  alertsObj["ackOverflow"] = alerts.ackOverflow;
+
   String body;
   serializeJson(req, body);
 

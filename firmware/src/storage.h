@@ -9,6 +9,7 @@
 //   /tokens.json   { accessToken, refreshToken, accessExpiresAtEpoch }
 //   /state.json    { schedules: [ {id, lastRunDate "YYYY-MM-DD", lastRunEpoch} ] }
 //   /pending.json  { events: [ {scheduleId,durationSeconds,wateredAtIso} ] }
+//   /alerts.json   { overflow, overflowSensors, lowWater }  (unreported alert snapshot)
 
 namespace storage {
 
@@ -27,6 +28,10 @@ bool saveState(const JsonDocument& doc);
 bool loadPending(JsonDocument& out);
 bool savePending(const JsonDocument& doc);
 bool clearPending();
+
+bool loadAlerts(JsonDocument& out);
+bool saveAlerts(const JsonDocument& doc);
+bool clearAlerts();
 
 }  // namespace storage
 

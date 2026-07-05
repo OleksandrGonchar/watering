@@ -36,12 +36,22 @@ struct SyncResult {
   uint32_t nextWakeSeconds;
 };
 
+// Current water-safety alert state reported to the server on every /sync so it
+// can raise/clear the dashboard banners and keep the history.
+struct AlertReport {
+  bool overflowActive = false;
+  uint8_t overflowSensors = 0;   // bit0 = sensor #1, bit1 = sensor #2
+  bool lowWaterActive = false;
+  bool ackOverflow = false;      // set for one cycle after the button is pressed
+};
+
 // POST /api/device/sync. Body is built from the args. On 401, callers should
 // refresh tokens and retry.
 SyncResult sync(const Tokens& tokens,
                 int configVersion,
                 bool sendClaimCode,
-                const std::vector<schedule::PendingEvent>& pending);
+                const std::vector<schedule::PendingEvent>& pending,
+                const AlertReport& alerts);
 
 }  // namespace api
 

@@ -9,11 +9,15 @@
 
 namespace schedule {
 
+// Which actuator a schedule/event drives.
+enum class Kind : uint8_t { Watering = 0, Humidifier = 1 };
+
 struct Schedule {
   int id;
   int hour;
   int minute;
   int durationSeconds;
+  Kind kind = Kind::Watering;
 };
 
 struct ScheduleStateEntry {
@@ -25,6 +29,14 @@ struct PendingEvent {
   int scheduleId;
   uint32_t durationSeconds;
   String wateredAtIso;  // local "YYYY-MM-DDTHH:MM:SS"
+  Kind kind = Kind::Watering;
+};
+
+// Filled in by runDueSchedules to report whether watering had to be aborted
+// because an overflow sensor triggered.
+struct RunOutcome {
+  bool overflow = false;
+  uint8_t overflowSensors = 0;  // bit0 = sensor #1, bit1 = sensor #2
 };
 
 // Parse "/config.json" payload into a vector of Schedules. configVersion is
@@ -47,10 +59,16 @@ void serializePending(JsonDocument& doc, const std::vector<PendingEvent>& events
 //
 // This logic is the catch-up rule: if the device was offline at the scheduled
 // minute, it still waters when it next wakes up.
+//
+// Overflow safety: before every pump run (and continuously during it) the
+// overflow plate sensors are polled. If water is detected the pump is cut, the
+// partial duration is still logged, remaining schedules are skipped, and
+// outcome.overflow is set so the caller can raise the alert.
 void runDueSchedules(const DateTime& now,
                      const std::vector<Schedule>& schedules,
                      std::map<int, ScheduleStateEntry>& state,
-                     std::vector<PendingEvent>& pending);
+                     std::vector<PendingEvent>& pending,
+                     RunOutcome& outcome);
 
 }  // namespace schedule
 
