@@ -152,11 +152,15 @@ bool buttonPressed() {
 void logInputs() {
 #ifdef REED_BUTTON_ON_ADC
   AdcState s = readAdcState();
-  Serial.printf(
-      "[sensors] adc=%d (<%d=reed, <%d=btn, <%d=both) lowWater=%d button=%d "
-      "overflow=0x%02x\n",
-      s.adc, ADC_REED_MAX, ADC_BUTTON_MAX, ADC_BOTH_MAX, s.reed ? 1 : 0,
-      s.button ? 1 : 0, overflowMask());
+  const char* decode = "idle";
+  if (s.reed && s.button) decode = "reed+button";
+  else if (s.button) decode = "button";
+  else if (s.reed) decode = "reed (low water)";
+
+  Serial.printf("[sensors] A0 raw=%d / 1023  decode=%s  (thresholds: both<%d btn<%d reed<%d)\n",
+                s.adc, decode, ADC_BOTH_MAX, ADC_BUTTON_MAX, ADC_REED_MAX);
+  Serial.printf("[sensors] lowWater=%d button=%d overflow=0x%02x\n",
+                s.reed ? 1 : 0, s.button ? 1 : 0, overflowMask());
 #else
   Serial.printf(
       "[sensors] overflow=0x%02x lowWater=%d button=%d\n", overflowMask(),
