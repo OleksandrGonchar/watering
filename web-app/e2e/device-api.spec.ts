@@ -120,6 +120,56 @@ test.describe("POST /api/device/sync", () => {
     expect(events[0].durationSeconds).toBe(12);
   });
 
+  test("bogus RTC wateredAt is replaced so sync still succeeds", async ({
+    request,
+    prisma,
+    testDevice,
+  }) => {
+    const login = await request.post("/api/device/login", {
+      data: {
+        deviceId: testDevice.id,
+        username: testDevice.username,
+        password: testDevice.password,
+      },
+    });
+    expect(login.status()).toBe(200);
+    const { accessToken } = await login.json();
+
+    const before = Date.now();
+    const r = await request.post("/api/device/sync", {
+      headers: { authorization: `Bearer ${accessToken}` },
+      data: {
+        configVersion: 0,
+        events: [
+          {
+            scheduleId: null,
+            durationSeconds: 8,
+            // Unset DS1302 often produces month/day zero → Invalid Date in JS.
+            wateredAt: "2000-00-00T00:00:00",
+          },
+          {
+            scheduleId: null,
+            durationSeconds: 9,
+            // Valid parse but absurdly old — still treat as bogus RTC.
+            wateredAt: "2000-01-01T00:00:00",
+          },
+        ],
+      },
+    });
+    expect(r.status()).toBe(200);
+
+    const events = await prisma.wateringEvent.findMany({
+      where: { deviceId: testDevice.id },
+      orderBy: { durationSeconds: "asc" },
+    });
+    expect(events).toHaveLength(2);
+    for (const e of events) {
+      const ms = e.wateredAt.getTime();
+      expect(ms).toBeGreaterThanOrEqual(before - 5_000);
+      expect(ms).toBeLessThanOrEqual(Date.now() + 5_000);
+    }
+  });
+
   test("configChanged is false on second sync with same configVersion", async ({
     request,
     testDevice,

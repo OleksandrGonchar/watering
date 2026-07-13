@@ -3,7 +3,10 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { authenticateDevice } from "@/lib/deviceAuthMiddleware";
-import { formatLocalIsoForDevice } from "@/lib/timezone";
+import {
+  formatLocalIsoForDevice,
+  parseDeviceWateredAt,
+} from "@/lib/timezone";
 
 const DEFAULT_NEXT_WAKE_SECONDS = 30 * 60;
 
@@ -119,16 +122,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "device_not_found" }, { status: 404 });
   }
 
-  // Persist watering events from the device.
+  // Persist watering events from the device. Sanitize wateredAt so a bogus
+  // RTC timestamp (Invalid Date / year 2000 / far future) cannot abort sync.
   if (parsed.data.events && parsed.data.events.length > 0) {
+    const syncedAt = new Date();
     await prisma.wateringEvent.createMany({
-      data: parsed.data.events.map((e) => ({
-        deviceId,
-        scheduleId: e.scheduleId ?? null,
-        durationSeconds: e.durationSeconds,
-        wateredAt: new Date(e.wateredAt),
-        type: e.type ?? "watering",
-      })),
+      data: parsed.data.events.map((e) => {
+        const wateredAt = parseDeviceWateredAt(e.wateredAt, syncedAt);
+        if (wateredAt === syncedAt && e.wateredAt) {
+          console.warn(
+            `[device/sync] device ${deviceId}: replaced invalid wateredAt "${e.wateredAt}" with server time`,
+          );
+        }
+        return {
+          deviceId,
+          scheduleId: e.scheduleId ?? null,
+          durationSeconds: e.durationSeconds,
+          wateredAt,
+          type: e.type ?? "watering",
+        };
+      }),
     });
   }
 
