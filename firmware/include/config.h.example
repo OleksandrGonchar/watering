@@ -99,4 +99,9 @@
 // the device returns to deep sleep. Default 1 minute.
 #define LOW_WATER_MIN_BLINK_MS  60000UL
 
+// Uncomment while debugging over USB Serial. Deep-sleep wake needs a D0↔RST
+// jumper; without it the board sleeps forever. This flag replaces deep sleep
+// with delay()+restart so the monitor keeps showing boots every minute.
+#define DEBUG_SKIP_DEEP_SLEEP
+
 #endif

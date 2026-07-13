@@ -44,9 +44,18 @@ void deepSleepFor(uint32_t seconds) {
   // while the pin floats.
   sensors::redLed(false);
   sensors::blueLed(false);
+#ifdef DEBUG_SKIP_DEEP_SLEEP
+  // USB debugging: timer wake needs D0↔RST. Without it, deep sleep never
+  // returns — use a plain delay + restart so Serial keeps working.
+  Serial.printf("[main] DEBUG: delay %u s then restart (no deep sleep)\n", seconds);
+  Serial.flush();
+  delay((uint32_t)seconds * 1000UL);
+  ESP.restart();
+#else
   Serial.printf("[main] deep sleeping for %u s\n", seconds);
   Serial.flush();
   ESP.deepSleep((uint64_t)seconds * 1000000ULL);
+#endif
 }
 
 bool loadTokensFromStorage(api::Tokens& out) {
