@@ -55,3 +55,6 @@ yarn-error.log*
 
 # TypeScript
 *.tsbuildinfo
+
+firmware/include/config.h
+firmware/data/secrets/
