@@ -53,6 +53,12 @@ bool isLowWater() { return readActive(PIN_LOW_WATER); }
 
 bool buttonPressed() { return readActive(PIN_ACK_BUTTON); }
 
+void logInputs() {
+  Serial.printf(
+      "[sensors] overflow=0x%02x lowWater=%d button=%d\n", overflowMask(),
+      isLowWater() ? 1 : 0, buttonPressed() ? 1 : 0);
+}
+
 void redLed(bool on) {
   expander.write(PIN_LED_RED, on ? LED_ON_LEVEL : LED_OFF_LEVEL);
 }
@@ -84,13 +90,14 @@ bool readActive(uint8_t pin) {
 // A single analogRead is decoded into two flags; a closed contact pulls the
 // line toward GND, so lower readings mean "active".
 struct AdcState {
+  int adc;
   bool reed;
   bool button;
 };
 
 AdcState readAdcState() {
   int adc = analogRead(A0);
-  AdcState s{false, false};
+  AdcState s{adc, false, false};
   if (adc < ADC_BOTH_MAX) {
     s.reed = true;
     s.button = true;
@@ -102,7 +109,6 @@ AdcState readAdcState() {
   return s;
 }
 #endif
-
 }  // namespace
 
 namespace sensors {
@@ -140,6 +146,21 @@ bool buttonPressed() {
   return readAdcState().button;
 #else
   return readActive(PIN_ACK_BUTTON);
+#endif
+}
+
+void logInputs() {
+#ifdef REED_BUTTON_ON_ADC
+  AdcState s = readAdcState();
+  Serial.printf(
+      "[sensors] adc=%d (<%d=reed, <%d=btn, <%d=both) lowWater=%d button=%d "
+      "overflow=0x%02x\n",
+      s.adc, ADC_REED_MAX, ADC_BUTTON_MAX, ADC_BOTH_MAX, s.reed ? 1 : 0,
+      s.button ? 1 : 0, overflowMask());
+#else
+  Serial.printf(
+      "[sensors] overflow=0x%02x lowWater=%d button=%d\n", overflowMask(),
+      isLowWater() ? 1 : 0, buttonPressed() ? 1 : 0);
 #endif
 }
 

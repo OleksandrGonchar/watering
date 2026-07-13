@@ -62,14 +62,14 @@ void saveTokensToStorage(const api::Tokens& t) {
   storage::saveTokens(doc);
 }
 
-void loadAlertSnapshot(bool& overflow, uint8_t& overflowSensors, bool& lowWater) {
+void loadAlertSnapshot(bool& overflow, uint8_t& overflowSensors) {
   JsonDocument doc;
   if (!storage::loadAlerts(doc)) return;
   if (doc["overflow"].as<bool>()) {
     overflow = true;
     overflowSensors |= doc["overflowSensors"].as<uint8_t>();
   }
-  if (doc["lowWater"].as<bool>()) lowWater = true;
+  // lowWater in /alerts.json is ignored: the live reed reading is authoritative.
 }
 
 void saveAlertSnapshot(bool overflow, uint8_t overflowSensors, bool lowWater) {
@@ -130,19 +130,22 @@ void setup() {
   }
 
   // === Water-safety alerts ===
-  // Carry forward any alert that a previous wake failed to report, then merge
-  // with the current live sensor readings.
+  // Overflow latches from a previous failed-to-report snapshot (and stays
+  // until the user presses the ack button). Low water follows the live reed
+  // reading so a stale /alerts.json cannot keep the alarm on after refill.
   bool overflowAlert = false;
   uint8_t overflowSensors = 0;
-  bool lowWaterAlert = false;
-  loadAlertSnapshot(overflowAlert, overflowSensors, lowWaterAlert);
+  loadAlertSnapshot(overflowAlert, overflowSensors);
 
-  if (sensors::isLowWater()) lowWaterAlert = true;
+  bool lowWaterAlert = sensors::isLowWater();
   uint8_t liveOverflow = sensors::overflowMask();
   if (liveOverflow != 0) {
     overflowAlert = true;
     overflowSensors |= liveOverflow;
   }
+  sensors::logInputs();
+  Serial.printf("[main] alerts: overflow=%d (mask=0x%02x) lowWater=%d\n",
+                overflowAlert ? 1 : 0, overflowSensors, lowWaterAlert ? 1 : 0);
 
   // === Run due schedules locally (catch-up, no network needed) ===
   // Never water while overflowing or when the tank is empty.

@@ -28,6 +28,9 @@ bool isLowWater();
 // True while the acknowledge button is held down.
 bool buttonPressed();
 
+// Print overflow / reed / button (and A0 ADC when using the resistor ladder).
+void logInputs();
+
 void redLed(bool on);
 void blueLed(bool on);
 
