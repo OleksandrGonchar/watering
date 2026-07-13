@@ -40,6 +40,10 @@ constexpr uint32_t DEFAULT_WAKE_SECONDS = 60UL;
 void deepSleepFor(uint32_t seconds) {
   if (seconds == 0) seconds = DEFAULT_WAKE_SECONDS;
   if (seconds > MAX_DEEP_SLEEP_SECONDS) seconds = MAX_DEEP_SLEEP_SECONDS;
+  // Drive LEDs off before sleep so an active-low blue LED cannot stay lit
+  // while the pin floats.
+  sensors::redLed(false);
+  sensors::blueLed(false);
   Serial.printf("[main] deep sleeping for %u s\n", seconds);
   Serial.flush();
   ESP.deepSleep((uint64_t)seconds * 1000000ULL);

@@ -75,15 +75,22 @@
   #define ADC_BUTTON_MAX  500         // 180 <= adc < 500  -> button only
   #define ADC_REED_MAX    850         // 500 <= adc < 850  -> reed only
                                       // adc >= 850        -> none
-  // LEDs on direct GPIO are wired active-high (pin -> resistor -> LED -> GND).
-  #define LED_ON_LEVEL    HIGH
-  #define LED_OFF_LEVEL   LOW
+  // LEDs: many breadboard wirings put the LED to 3V3 (active-low). If your
+  // LEDs stay solidly ON when they should be off, keep these levels; if they
+  // never light, swap to HIGH/LOW (pin -> resistor -> LED -> GND).
+  #define LED_ON_LEVEL    LOW
+  #define LED_OFF_LEVEL   HIGH
 #endif
 
-// Digital leak/reed/button contacts read active-low by default (a closed
-// contact pulls the line to GND). Set to 1 if yours drive the line HIGH.
+// Digital leak/button contacts read active-low by default (a closed contact
+// pulls the line to GND). Set to 1 if yours drive the line HIGH.
 // (Does not apply to the A0 ladder, which is inherently pull-to-GND.)
 #define SENSOR_ACTIVE_HIGH      0
+
+// Reed / float polarity for low-water detection:
+//   1 = contact CLOSED (A0 pulled toward GND) means low water (float at bottom)
+//   0 = inverted: contact OPEN means low water (float closes when tank is full)
+#define REED_CLOSED_MEANS_LOW_WATER  0
 
 // LED blink half-period in milliseconds.
 #define LED_BLINK_INTERVAL_MS   500

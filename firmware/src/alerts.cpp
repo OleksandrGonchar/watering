@@ -50,6 +50,9 @@ void blinkBlueFor(uint32_t durationMs) {
   }
 
   sensors::blueLed(false);
+  // One more settle write — GPIO3 can be weakly pulled by the USB-UART.
+  delay(20);
+  sensors::blueLed(false);
 }
 
 }  // namespace alerts

@@ -1,6 +1,12 @@
 #include "sensors.h"
 #include "config.h"
 
+#ifndef REED_CLOSED_MEANS_LOW_WATER
+// 0 = float closes when tank is full (open contact = low water). Set to 1 in
+// config.h if your float closes near the bottom when empty.
+#define REED_CLOSED_MEANS_LOW_WATER 0
+#endif
+
 // ---------------------------------------------------------------------------
 // Backend 1: PCF8574 I2C expander (recommended).
 // ---------------------------------------------------------------------------
@@ -49,14 +55,22 @@ uint8_t overflowMask() {
   return mask;
 }
 
-bool isLowWater() { return readActive(PIN_LOW_WATER); }
+bool isLowWater() {
+  const bool reedClosed = readActive(PIN_LOW_WATER);
+#if REED_CLOSED_MEANS_LOW_WATER
+  return reedClosed;
+#else
+  return !reedClosed;
+#endif
+}
 
 bool buttonPressed() { return readActive(PIN_ACK_BUTTON); }
 
 void logInputs() {
   Serial.printf(
-      "[sensors] overflow=0x%02x lowWater=%d button=%d\n", overflowMask(),
-      isLowWater() ? 1 : 0, buttonPressed() ? 1 : 0);
+      "[sensors] overflow=0x%02x lowWater=%d button=%d reedClosed=%d\n",
+      overflowMask(), isLowWater() ? 1 : 0, buttonPressed() ? 1 : 0,
+      readActive(PIN_LOW_WATER) ? 1 : 0);
 }
 
 void redLed(bool on) {
@@ -135,9 +149,14 @@ uint8_t overflowMask() {
 
 bool isLowWater() {
 #ifdef REED_BUTTON_ON_ADC
-  return readAdcState().reed;
+  const bool reedClosed = readAdcState().reed;
 #else
-  return readActive(PIN_LOW_WATER);
+  const bool reedClosed = readActive(PIN_LOW_WATER);
+#endif
+#if REED_CLOSED_MEANS_LOW_WATER
+  return reedClosed;
+#else
+  return !reedClosed;
 #endif
 }
 
@@ -152,15 +171,17 @@ bool buttonPressed() {
 void logInputs() {
 #ifdef REED_BUTTON_ON_ADC
   AdcState s = readAdcState();
-  const char* decode = "idle";
-  if (s.reed && s.button) decode = "reed+button";
-  else if (s.button) decode = "button";
-  else if (s.reed) decode = "reed (low water)";
+  const bool lowWater = isLowWater();
+  const char* decode = "idle (open)";
+  if (s.reed && s.button) decode = "reed+button closed";
+  else if (s.button) decode = "button closed";
+  else if (s.reed) decode = "reed closed";
 
-  Serial.printf("[sensors] A0 raw=%d / 1023  decode=%s  (thresholds: both<%d btn<%d reed<%d)\n",
+  Serial.printf("[sensors] A0 raw=%d / 1023  contact=%s  (thresholds: both<%d btn<%d reed<%d)\n",
                 s.adc, decode, ADC_BOTH_MAX, ADC_BUTTON_MAX, ADC_REED_MAX);
-  Serial.printf("[sensors] lowWater=%d button=%d overflow=0x%02x\n",
-                s.reed ? 1 : 0, s.button ? 1 : 0, overflowMask());
+  Serial.printf("[sensors] lowWater=%d (reedClosed=%d, REED_CLOSED_MEANS_LOW_WATER=%d) button=%d overflow=0x%02x\n",
+                lowWater ? 1 : 0, s.reed ? 1 : 0, REED_CLOSED_MEANS_LOW_WATER,
+                s.button ? 1 : 0, overflowMask());
 #else
   Serial.printf(
       "[sensors] overflow=0x%02x lowWater=%d button=%d\n", overflowMask(),
