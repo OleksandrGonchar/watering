@@ -8,7 +8,7 @@ import {
   parseDeviceWateredAt,
 } from "@/lib/timezone";
 
-const DEFAULT_NEXT_WAKE_SECONDS = 30 * 60;
+const DEFAULT_NEXT_WAKE_SECONDS = 60;
 
 const wateringEventSchema = z.object({
   scheduleId: z.number().int().nullable().optional(),

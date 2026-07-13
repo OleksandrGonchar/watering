@@ -35,7 +35,7 @@
 namespace {
 
 constexpr uint32_t MAX_DEEP_SLEEP_SECONDS = 70UL * 60UL;
-constexpr uint32_t DEFAULT_WAKE_SECONDS = 30UL * 60UL;
+constexpr uint32_t DEFAULT_WAKE_SECONDS = 60UL;
 
 void deepSleepFor(uint32_t seconds) {
   if (seconds == 0) seconds = DEFAULT_WAKE_SECONDS;

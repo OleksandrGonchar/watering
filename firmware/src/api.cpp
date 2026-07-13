@@ -80,7 +80,7 @@ SyncResult sync(const Tokens& tokens,
   SyncResult r{};
   r.ok = false;
   r.unauthorized = false;
-  r.nextWakeSeconds = 1800;
+  r.nextWakeSeconds = 60;
 
   JsonDocument req;
   req["configVersion"] = configVersion;
@@ -135,7 +135,7 @@ SyncResult sync(const Tokens& tokens,
   r.configVersion = doc["configVersion"].as<int>();
   r.currentLocalTime = doc["currentLocalTime"].as<const char*>() ?: "";
   r.nextWakeSeconds = doc["nextWakeSeconds"].as<uint32_t>();
-  if (r.nextWakeSeconds == 0) r.nextWakeSeconds = 1800;
+  if (r.nextWakeSeconds == 0) r.nextWakeSeconds = 60;
 
   if (r.configChanged) {
     schedule::parseConfig(doc, r.schedules, r.configVersion);
