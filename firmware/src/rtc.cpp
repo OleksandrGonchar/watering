@@ -26,31 +26,43 @@ DateTime toDateTime(const RtcDateTime& dt) {
                   dt.Hour(), dt.Minute(), dt.Second());
 }
 
+void ensureWritableAndRunning() {
+  if (g_rtc.GetIsWriteProtected()) {
+    Serial.println("[rtc] clearing write-protect");
+    g_rtc.SetIsWriteProtected(false);
+  }
+  if (!g_rtc.GetIsRunning()) {
+    Serial.println("[rtc] starting oscillator");
+    g_rtc.SetIsRunning(true);
+  }
+}
+
 }  // namespace
 
 namespace rtc {
 
 bool begin() {
   g_rtc.Begin();
+  ensureWritableAndRunning();
 
-  // The DS1302 ships write-protected and possibly halted. Clear both so we can
-  // adjust the time and so the oscillator actually runs.
-  if (g_rtc.GetIsWriteProtected()) {
-    g_rtc.SetIsWriteProtected(false);
-  }
-  if (!g_rtc.GetIsRunning()) {
-    Serial.println("[rtc] DS1302 was halted, starting oscillator");
-    g_rtc.SetIsRunning(true);
-  }
+  RtcDateTime dt = g_rtc.GetDateTime();
+  Serial.printf("[rtc] raw=%04u-%02u-%02uT%02u:%02u:%02u valid=%d\n",
+                dt.Year(), dt.Month(), dt.Day(), dt.Hour(), dt.Minute(),
+                dt.Second(), g_rtc.IsDateTimeValid() ? 1 : 0);
 
   if (!g_rtc.IsDateTimeValid()) {
-    // Battery/cap empty or first power-on: time is bogus until the first
-    // server sync corrects it.
-    Serial.println("[rtc] DS1302 time invalid, will rely on first server sync");
+    // Battery/cap empty, first power-on, or wiring fault: time is bogus until
+    // the first successful server sync writes a real clock.
+    Serial.println("[rtc] DS1302 time invalid — schedules deferred until sync");
   }
 
   g_initialized = true;
   return true;
+}
+
+bool isValid() {
+  if (!g_initialized) return false;
+  return g_rtc.IsDateTimeValid();
 }
 
 DateTime now() {
@@ -60,7 +72,10 @@ DateTime now() {
 
 bool applyServerLocalTime(const String& iso) {
   if (!g_initialized) return false;
-  if (iso.length() < 19) return false;
+  if (iso.length() < 19) {
+    Serial.printf("[rtc] reject server time (too short): '%s'\n", iso.c_str());
+    return false;
+  }
 
   int year = iso.substring(0, 4).toInt();
   int month = iso.substring(5, 7).toInt();
@@ -68,20 +83,47 @@ bool applyServerLocalTime(const String& iso) {
   int hour = iso.substring(11, 13).toInt();
   int minute = iso.substring(14, 16).toInt();
   int second = iso.substring(17, 19).toInt();
-  if (year < 2024 || month < 1 || month > 12) return false;
+  if (year < 2024 || month < 1 || month > 12 || day < 1 || day > 31 ||
+      hour > 23 || minute > 59 || second > 59) {
+    Serial.printf("[rtc] reject server time (out of range): '%s'\n", iso.c_str());
+    return false;
+  }
 
   RtcDateTime serverTime(year, month, day, hour, minute, second);
-  RtcDateTime current = g_rtc.GetDateTime();
-  long drift = (long)serverTime.Epoch32Time() - (long)current.Epoch32Time();
-  if (drift < 0) drift = -drift;
+  ensureWritableAndRunning();
 
-  if (drift > 30 || !g_rtc.IsDateTimeValid()) {
-    if (g_rtc.GetIsWriteProtected()) g_rtc.SetIsWriteProtected(false);
-    g_rtc.SetDateTime(serverTime);
-    Serial.printf("[rtc] adjusted by %ld seconds\n", drift);
-    return true;
+  // Never compute drift against an invalid chip clock — Epoch32Time on
+  // 2000-00-00 is garbage and can skip the write incorrectly.
+  const bool wasInvalid = !g_rtc.IsDateTimeValid();
+  long drift = 0;
+  if (!wasInvalid) {
+    RtcDateTime current = g_rtc.GetDateTime();
+    drift = (long)serverTime.Epoch32Time() - (long)current.Epoch32Time();
+    if (drift < 0) drift = -drift;
   }
-  return false;
+
+  if (!wasInvalid && drift <= 30) {
+    Serial.printf("[rtc] ok (drift=%ld s)\n", drift);
+    return false;
+  }
+
+  g_rtc.SetDateTime(serverTime);
+  ensureWritableAndRunning();
+
+  // Give the chip a moment, then confirm the write stuck.
+  delay(10);
+  RtcDateTime verify = g_rtc.GetDateTime();
+  const bool ok = g_rtc.IsDateTimeValid() && verify.Year() == (uint16_t)year &&
+                  verify.Month() == (uint8_t)month && verify.Day() == (uint8_t)day;
+
+  Serial.printf(
+      "[rtc] wrote %04d-%02d-%02dT%02d:%02d:%02d (wasInvalid=%d drift=%ld) "
+      "readback=%04u-%02u-%02uT%02u:%02u:%02u %s\n",
+      year, month, day, hour, minute, second, wasInvalid ? 1 : 0, drift,
+      verify.Year(), verify.Month(), verify.Day(), verify.Hour(), verify.Minute(),
+      verify.Second(), ok ? "OK" : "FAILED — check D1/D2/D5 wiring + battery");
+
+  return ok;
 }
 
 String toLocalIso(const DateTime& dt) {

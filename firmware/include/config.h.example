@@ -95,8 +95,16 @@
 // LED blink half-period in milliseconds.
 #define LED_BLINK_INTERVAL_MS   500
 
-// After a low-water wake, keep the blue LED blinking at least this long before
-// the device returns to deep sleep. Default 1 minute.
+// Local wake interval (deep sleep). Device checks sensors/schedules this often.
+#define LOCAL_WAKE_SECONDS      30UL
+
+// Connect Wi-Fi and POST /sync only every N local wakes (e.g. 6 → every 3 min
+// when LOCAL_WAKE_SECONDS is 30). Exceptions: invalid RTC, pending events,
+// overflow alert (and overflow ack after the button).
+#define SYNC_EVERY_WAKES        6
+
+// After a low-water wake that also syncs, keep the blue LED blinking at least
+// this long. Local-only wakes use a short blink instead.
 #define LOW_WATER_MIN_BLINK_MS  60000UL
 
 // Uncomment while debugging over USB Serial. Deep-sleep wake needs a D0↔RST

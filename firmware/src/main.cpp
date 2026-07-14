@@ -9,12 +9,10 @@
 //   3. For each schedule, run the catch-up algorithm: if it's past the
 //      scheduled time today AND we haven't run today AND the 6h circuit
 //      breaker is satisfied, water now. Append a PendingEvent.
-//   4. Connect Wi-Fi (skipped only on RTC failure or no schedules at all).
-//   5. POST /sync with current configVersion + pending events. On 401, refresh
-//      tokens and retry. On configChanged, persist new schedules. Sync DS1302
-//      from currentLocalTime.
-//   6. Save state, clear pending events on success, deep-sleep for
-//      nextWakeSeconds (capped at 70 minutes per ESP.deepSleep call).
+//   4. Most wakes are local-only (sensors + schedules). Wi-Fi + /sync run
+//      every SYNC_EVERY_WAKES wakes (default: 6 × 30s ≈ every 3 minutes).
+//   5. On sync wakes: connect Wi-Fi, POST /sync, refresh schedules/RTC.
+//   6. Deep-sleep LOCAL_WAKE_SECONDS (default 30s; capped at 70 minutes).
 //
 // Hardware: GPIO16 (D0) MUST be wired to RST for deep-sleep wake.
 
@@ -35,10 +33,43 @@
 namespace {
 
 constexpr uint32_t MAX_DEEP_SLEEP_SECONDS = 70UL * 60UL;
-constexpr uint32_t DEFAULT_WAKE_SECONDS = 60UL;
+
+#ifndef LOCAL_WAKE_SECONDS
+#define LOCAL_WAKE_SECONDS 30UL
+#endif
+#ifndef SYNC_EVERY_WAKES
+#define SYNC_EVERY_WAKES 6
+#endif
+#ifndef LOW_WATER_MIN_BLINK_MS
+#define LOW_WATER_MIN_BLINK_MS 60000UL
+#endif
+
+// Short blue blink on local-only wakes so a 60s LED window cannot block the
+// 1-minute sensor cadence.
+constexpr uint32_t LOW_WATER_LOCAL_BLINK_MS = 3000UL;
+
+constexpr uint32_t WAKE_META_MAGIC = 0x57414B45UL;  // 'WAKE'
+
+struct WakeMeta {
+  uint32_t magic;
+  uint32_t wakesSinceSync;
+};
+
+bool loadWakeMeta(WakeMeta& meta) {
+  if (!ESP.rtcUserMemoryRead(0, reinterpret_cast<uint32_t*>(&meta),
+                             sizeof(meta))) {
+    return false;
+  }
+  return meta.magic == WAKE_META_MAGIC;
+}
+
+void saveWakeMeta(const WakeMeta& meta) {
+  WakeMeta copy = meta;
+  ESP.rtcUserMemoryWrite(0, reinterpret_cast<uint32_t*>(&copy), sizeof(copy));
+}
 
 void deepSleepFor(uint32_t seconds) {
-  if (seconds == 0) seconds = DEFAULT_WAKE_SECONDS;
+  if (seconds == 0) seconds = LOCAL_WAKE_SECONDS;
   if (seconds > MAX_DEEP_SLEEP_SECONDS) seconds = MAX_DEEP_SLEEP_SECONDS;
   // Drive LEDs off before sleep so an active-low blue LED cannot stay lit
   // while the pin floats.
@@ -112,13 +143,24 @@ void setup() {
   humidifier::begin();
   sensors::begin();
   bool storageOk = storage::begin();
-  bool rtcOk = rtc::begin();
+  rtc::begin();  // logs raw time; isValid() gates schedules
 
   if (!storageOk) {
     Serial.println("[main] storage init failed — sleeping briefly");
-    deepSleepFor(60);
+    deepSleepFor(LOCAL_WAKE_SECONDS);
     return;
   }
+
+  // === Wake cadence (RTC memory survives deep sleep, cleared on power loss) ===
+  WakeMeta wakeMeta{};
+  if (!loadWakeMeta(wakeMeta)) {
+    wakeMeta.magic = WAKE_META_MAGIC;
+    // Power-on / first boot: sync immediately.
+    wakeMeta.wakesSinceSync = SYNC_EVERY_WAKES;
+  } else {
+    wakeMeta.wakesSinceSync++;
+  }
+  saveWakeMeta(wakeMeta);
 
   // === Load persistent state ===
   std::vector<schedule::Schedule> schedules;
@@ -160,29 +202,38 @@ void setup() {
   Serial.printf("[main] alerts: overflow=%d (mask=0x%02x) lowWater=%d\n",
                 overflowAlert ? 1 : 0, overflowSensors, lowWaterAlert ? 1 : 0);
 
-  // === Run due schedules locally (catch-up, no network needed) ===
-  // Never water while overflowing or when the tank is empty.
-  if (rtcOk && !schedules.empty() && !overflowAlert && !lowWaterAlert) {
+  // === Run due schedules locally (catch-up) ===
+  // Never water while overflowing, tank empty, or RTC still at 2000-00-00 —
+  // bogus clock would fire the wrong schedules. Invalid clock is fixed after
+  // /sync (see below), then we try catch-up once more.
+  bool schedulesRan = false;
+  auto tryRunSchedules = [&](const char* phase) {
+    if (schedulesRan) return;
+    if (!rtc::isValid() || schedules.empty() || overflowAlert || lowWaterAlert) {
+      Serial.printf(
+          "[main] skipping schedules (%s rtcValid=%d schedules=%u overflow=%d "
+          "lowWater=%d)\n",
+          phase, rtc::isValid() ? 1 : 0, (unsigned)schedules.size(),
+          overflowAlert ? 1 : 0, lowWaterAlert ? 1 : 0);
+      return;
+    }
     DateTime now = rtc::now();
-    Serial.printf("[main] now=%s, schedules=%u\n",
-                  rtc::toLocalIso(now).c_str(), (unsigned)schedules.size());
+    Serial.printf("[main] now=%s (%s), schedules=%u\n",
+                  rtc::toLocalIso(now).c_str(), phase,
+                  (unsigned)schedules.size());
     schedule::RunOutcome outcome;
     schedule::runDueSchedules(now, schedules, state, pending, outcome);
     if (outcome.overflow) {
       overflowAlert = true;
       overflowSensors |= outcome.overflowSensors;
     }
-
     JsonDocument doc;
     schedule::serializeState(doc, state);
     storage::saveState(doc);
-  } else {
-    Serial.printf(
-        "[main] skipping schedules (rtcOk=%d, schedules=%u, overflow=%d, "
-        "lowWater=%d)\n",
-        rtcOk ? 1 : 0, (unsigned)schedules.size(), overflowAlert ? 1 : 0,
-        lowWaterAlert ? 1 : 0);
-  }
+    schedulesRan = true;
+  };
+
+  tryRunSchedules("pre-sync");
 
   // Persist the alert snapshot so it survives a failed sync / reset.
   saveAlertSnapshot(overflowAlert, overflowSensors, lowWaterAlert);
@@ -193,31 +244,62 @@ void setup() {
     storage::savePending(doc);
   }
 
+  // Sync every N wakes, or sooner when we must talk to the server.
+  bool needSync = wakeMeta.wakesSinceSync >= SYNC_EVERY_WAKES ||
+                  !rtc::isValid() || !pending.empty() || overflowAlert;
+  Serial.printf("[main] wake=%u/%u needSync=%d (rtcValid=%d pending=%u)\n",
+                wakeMeta.wakesSinceSync, (unsigned)SYNC_EVERY_WAKES,
+                needSync ? 1 : 0, rtc::isValid() ? 1 : 0,
+                (unsigned)pending.size());
+
+  bool ackOverflow = false;
+
+  if (!needSync) {
+    // Local-only wake: sensors/schedules already handled; skip Wi-Fi.
+    if (overflowAlert) {
+      // Should be unreachable (overflow forces needSync), kept as safety net.
+      alerts::blinkRedUntilButton();
+      ackOverflow = true;
+      needSync = true;
+    } else if (lowWaterAlert) {
+      alerts::blinkBlueFor(LOW_WATER_LOCAL_BLINK_MS);
+      deepSleepFor(LOCAL_WAKE_SECONDS);
+      return;
+    } else {
+      deepSleepFor(LOCAL_WAKE_SECONDS);
+      return;
+    }
+  }
+
   // === Sync with server ===
   if (!net::connect()) {
     Serial.println("[main] WiFi failed — will retry next wake");
     // Surface the alert locally even while offline (overflow can't wait).
     if (overflowAlert) {
       alerts::blinkRedUntilButton();
+      ackOverflow = true;
     } else if (lowWaterAlert) {
       alerts::blinkBlueFor(LOW_WATER_MIN_BLINK_MS);
     }
-    deepSleepFor(DEFAULT_WAKE_SECONDS);
+    deepSleepFor(LOCAL_WAKE_SECONDS);
     return;
   }
 
   api::Tokens tokens;
   loadTokensFromStorage(tokens);
 
-  uint32_t nowEpoch = rtcOk ? rtc::now().unixtime() : (millis() / 1000);
+  // Don't trust unixtime from a 2000-00-00 RTC for token expiry decisions.
+  uint32_t nowEpoch =
+      rtc::isValid() ? rtc::now().unixtime() : (millis() / 1000);
   if (!api::ensureValidToken(tokens, nowEpoch)) {
     Serial.println("[main] auth failed — will retry next wake");
     if (overflowAlert) {
       alerts::blinkRedUntilButton();
+      ackOverflow = true;
     } else if (lowWaterAlert) {
       alerts::blinkBlueFor(LOW_WATER_MIN_BLINK_MS);
     }
-    deepSleepFor(DEFAULT_WAKE_SECONDS);
+    deepSleepFor(LOCAL_WAKE_SECONDS);
     return;
   }
   saveTokensToStorage(tokens);
@@ -231,7 +313,7 @@ void setup() {
   alertReport.overflowActive = overflowAlert;
   alertReport.overflowSensors = overflowSensors;
   alertReport.lowWaterActive = lowWaterAlert;
-  alertReport.ackOverflow = false;
+  alertReport.ackOverflow = ackOverflow;
 
   api::SyncResult result =
       api::sync(tokens, configVersion, sendClaimCode, pending, alertReport);
@@ -252,53 +334,84 @@ void setup() {
     Serial.println("[main] /sync failed — keeping pending events for retry");
     // Alert (if any) is kept in /alerts.json for the next wake. Still surface
     // it locally so the user sees the LED even while offline.
-    if (overflowAlert) {
+    if (overflowAlert && !ackOverflow) {
       alerts::blinkRedUntilButton();
+      ackOverflow = true;
     } else if (lowWaterAlert) {
       alerts::blinkBlueFor(LOW_WATER_MIN_BLINK_MS);
     }
-    deepSleepFor(DEFAULT_WAKE_SECONDS);
+    deepSleepFor(LOCAL_WAKE_SECONDS);
     return;
   }
 
-  // Successful sync: server now knows about any alert, clear the local queues.
+  // Successful sync: reset the cadence counter and clear local queues.
+  wakeMeta.wakesSinceSync = 0;
+  saveWakeMeta(wakeMeta);
   storage::clearPending();
   storage::clearAlerts();
 
-  // Sync RTC if drift > 30s.
-  if (rtcOk && result.currentLocalTime.length() > 0) {
+  // Sync RTC from server local time (force-writes when chip still has 2000-00-00).
+  if (result.currentLocalTime.length() > 0) {
+    Serial.printf("[main] server time=%s\n", result.currentLocalTime.c_str());
     rtc::applyServerLocalTime(result.currentLocalTime);
+  } else {
+    Serial.println("[main] sync ok but currentLocalTime empty — cannot set RTC");
   }
 
   // Persist new schedules if config changed.
   if (result.configChanged) {
+    schedules = result.schedules;
+    configVersion = result.configVersion;
     JsonDocument doc;
-    schedule::serializeConfig(doc, result.configVersion, result.schedules);
+    schedule::serializeConfig(doc, configVersion, schedules);
     storage::saveConfig(doc);
 
     // Drop state entries that no longer correspond to a known schedule.
     std::map<int, schedule::ScheduleStateEntry> trimmed;
-    for (const auto& s : result.schedules) {
+    for (const auto& s : schedules) {
       auto it = state.find(s.id);
       if (it != state.end()) trimmed[s.id] = it->second;
     }
+    state.swap(trimmed);
     JsonDocument st;
-    schedule::serializeState(st, trimmed);
+    schedule::serializeState(st, state);
     storage::saveState(st);
 
-    Serial.printf("[main] config updated: v%d, %u schedules\n",
-                  result.configVersion, (unsigned)result.schedules.size());
+    Serial.printf("[main] config updated: v%d, %u schedules\n", configVersion,
+                  (unsigned)schedules.size());
   }
 
-  Serial.printf("[main] claimed=%d configChanged=%d nextWake=%u s\n",
-                result.claimed ? 1 : 0,
-                result.configChanged ? 1 : 0,
-                result.nextWakeSeconds);
+  // Catch-up watering after the clock was corrected (skipped pre-sync).
+  pending.clear();
+  tryRunSchedules("post-sync");
+  if (!pending.empty()) {
+    // Report events produced after the clock fix on the next wake (we already
+    // cleared pending above after the first sync). Best-effort second sync.
+    api::AlertReport quiet;
+    quiet.lowWaterActive = lowWaterAlert;
+    quiet.overflowActive = overflowAlert;
+    quiet.overflowSensors = overflowSensors;
+    api::SyncResult catchUp =
+        api::sync(tokens, configVersion, /*sendClaimCode=*/false, pending, quiet);
+    if (catchUp.ok) {
+      storage::clearPending();
+    } else {
+      JsonDocument doc;
+      schedule::serializePending(doc, pending);
+      storage::savePending(doc);
+      Serial.println("[main] post-sync watering events kept for next wake");
+    }
+  }
+
+  Serial.printf("[main] claimed=%d configChanged=%d nextLocalWake=%u s rtcValid=%d\n",
+                result.claimed ? 1 : 0, result.configChanged ? 1 : 0,
+                (unsigned)LOCAL_WAKE_SECONDS, rtc::isValid() ? 1 : 0);
 
   // === Alert indicators ===
-  if (overflowAlert) {
+  if (overflowAlert && !ackOverflow) {
     // Stay awake and blink the red LED until the user presses the button.
     alerts::blinkRedUntilButton();
+    ackOverflow = true;
 
     // Report the acknowledgement so the server hides the red banner (the row
     // stays in history). Best-effort — a failure just means the banner clears
@@ -319,7 +432,8 @@ void setup() {
     alerts::blinkBlueFor(LOW_WATER_MIN_BLINK_MS);
   }
 
-  deepSleepFor(result.nextWakeSeconds);
+  // Local cadence owns sleep length (server nextWakeSeconds is ignored).
+  deepSleepFor(LOCAL_WAKE_SECONDS);
 }
 
 void loop() {

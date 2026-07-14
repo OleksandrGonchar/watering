@@ -10,13 +10,17 @@ namespace rtc {
 // oscillator if it was halted. Returns false only if the module is absent.
 bool begin();
 
+// True when the chip holds a plausible calendar date (not 2000-00-00 / halted).
+bool isValid();
+
 // Current time as DateTime (local time of the device's timezone — RTC is
 // stored in local wall clock, not UTC).
 DateTime now();
 
 // Apply server-provided current local time. The server sends a string in the
 // form "YYYY-MM-DDTHH:MM:SS" already converted to the device's IANA timezone.
-// Returns true if the RTC was actually adjusted (drift > 30 seconds).
+// Returns true if the RTC was actually adjusted (drift > 30 seconds or was
+// invalid). Verifies the write by reading back.
 bool applyServerLocalTime(const String& iso);
 
 // Format a DateTime as "YYYY-MM-DDTHH:MM:SS" (no timezone suffix).
