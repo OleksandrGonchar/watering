@@ -26,69 +26,53 @@
 // #define VERCEL_BYPASS_SECRET  "your-automation-bypass-secret"
 
 // ===========================================================================
-// Water-safety + indicators + humidifier
+// Water-safety + indicators + humidifier (PCF8574 required)
 // ===========================================================================
 //
-// Peripherals: 2 leak/overflow plate sensors, a magnetic float / reed
-// low-water switch, an acknowledge button, the watering pump (D6/GPIO12), a
-// humidifier output, and two indicator LEDs (red = overflow, blue = low water).
+// A PCF8574 I2C I/O expander is mandatory. Almost all discrete I/O lives there
+// in two groups; only boot-critical / timed buses stay on the NodeMCU:
 //
-// DEFAULT wiring (Variant A): everything on bare NodeMCU GPIO, no extra IC.
-// Because the ESP8266 is pin-constrained, the reed switch and the button share
-// A0 through a small resistor ladder, and Serial runs TX-only (see main.cpp)
-// so RX/GPIO3 is free to drive the blue LED.
+//   PCF water-safety  P0..P4  overflow plates, float, red LED, ack button
+//   PCF hum. motion   P5..P7  motor direction relay, top/bottom dead-point reeds
+//   ESP D8 / GPIO15           humidifier + motor power (LOW at boot = safe)
+//   ESP D6 / GPIO12           pump NPN
+//   ESP D1/D2/D5              DS1302 RTC (CLK/DAT/RST) — kept together
+//   ESP D3/D4                 I2C SDA/SCL → PCF8574
+//   ESP D0 ↔ RST              deep-sleep wake
 //
-// OPTIONAL upgrade: define WATERING_USE_PCF8574 to move the sensors/LEDs/button
-// onto a PCF8574 I2C expander. That frees A0 + Serial RX and leaves spare lines
-// for a future lamp/switch. See README.
-// #define WATERING_USE_PCF8574
+// D8 stays on the ESP because GPIO15 is held LOW at boot; PCF8574 pins power
+// up weakly pulled HIGH, which would briefly energize an active-high load.
 
-// Humidifier output (driven via a MOSFET/relay). ESP-direct in BOTH wiring
-// modes; runs only while the board is awake, so no latch is needed.
-#define PIN_HUMIDIFIER  15            // D8 / GPIO15 (LOW at boot = driver off)
+#define PCF8574_ADDR    0x20        // A0..A2 tied to GND
+#define I2C_SDA_PIN     0           // D3 / GPIO0  (idle-HIGH, boot-safe)
+#define I2C_SCL_PIN     2           // D4 / GPIO2  (idle-HIGH, boot-safe)
 
-#ifdef WATERING_USE_PCF8574
-  #define PCF8574_ADDR    0x20        // A0..A2 tied to GND
-  #define I2C_SDA_PIN     0           // D3 / GPIO0  (idle-HIGH, boot-safe)
-  #define I2C_SCL_PIN     2           // D4 / GPIO2  (idle-HIGH, boot-safe)
-  // Expander pins P0..P5:
-  #define PIN_OVERFLOW_1  0           // P0 (input)
-  #define PIN_OVERFLOW_2  1           // P1 (input)
-  #define PIN_LOW_WATER   2           // P2 (input, reed switch)
-  #define PIN_LED_RED     3           // P3 (output)
-  #define PIN_LED_BLUE    4           // P4 (output)
-  #define PIN_ACK_BUTTON  5           // P5 (input, button to GND)
-  // LEDs on a PCF8574 are wired active-low (pin sinks current to the LED).
-  #define LED_ON_LEVEL    LOW
-  #define LED_OFF_LEVEL   HIGH
-#else
-  // --- Variant A: bare NodeMCU GPIO (default) ---
-  #define PIN_OVERFLOW_1  0           // D3 / GPIO0  (leak sensor 1)
-  #define PIN_OVERFLOW_2  2           // D4 / GPIO2  (leak sensor 2)
-  #define PIN_LED_RED     13          // D7 / GPIO13
-  #define PIN_LED_BLUE    3           // RX / GPIO3  (freed via SERIAL_TX_ONLY)
-  // Reed switch + acknowledge button share A0 through a resistor ladder.
-  // analogRead(A0) is 0..1023; a closed contact pulls the line toward GND, so
-  // lower readings mean "active". Tune the resistors to hit these bands:
-  #define REED_BUTTON_ON_ADC
-  #define ADC_BOTH_MAX    180         // adc <  180        -> reed AND button
-  #define ADC_BUTTON_MAX  500         // 180 <= adc < 500  -> button only
-  #define ADC_REED_MAX    850         // 500 <= adc < 850  -> reed only
-                                      // adc >= 850        -> none
-  // LEDs: many breadboard wirings put the LED to 3V3 (active-low). If your
-  // LEDs stay solidly ON when they should be off, keep these levels; if they
-  // never light, swap to HIGH/LOW (pin -> resistor -> LED -> GND).
-  #define LED_ON_LEVEL    LOW
-  #define LED_OFF_LEVEL   HIGH
-#endif
+// --- PCF8574 P0..P4: water safety ---
+#define PIN_OVERFLOW_1  0           // P0 (input)
+#define PIN_OVERFLOW_2  1           // P1 (input)
+#define PIN_LOW_WATER   2           // P2 (input, float / reed)
+#define PIN_LED_RED     3           // P3 (output, active-low)
+#define PIN_ACK_BUTTON  4           // P4 (input, button to GND)
 
-// Digital leak/button contacts read active-low by default (a closed contact
-// pulls the line to GND). Set to 1 if yours drive the line HIGH.
-// (Does not apply to the A0 ladder, which is inherently pull-to-GND.)
+// --- PCF8574 P5..P7: humidifier motion ---
+#define PIN_MOTOR_DIR   5           // P5 (output, 2-ch polarity relay)
+#define PIN_TOP_REED    6           // P6 (input, upper dead point)
+#define PIN_BOTTOM_REED 7           // P7 (input, lower dead point)
+
+// Red LED on PCF8574 is wired active-low (pin sinks current through LED + R).
+#define LED_ON_LEVEL    LOW
+#define LED_OFF_LEVEL   HIGH
+
+// Humidifier + motor power (MOSFET/relay). Stays on ESP for boot-safe LOW.
+// Runs only while the board is awake, so no latch is needed.
+#define PIN_HUMIDIFIER  15          // D8 / GPIO15
+
+// Digital leak/button/dead-point contacts read active-low by default (a closed
+// contact pulls the line to GND). Set to 1 if yours drive the line HIGH.
 #define SENSOR_ACTIVE_HIGH      0
 
-// Reed / float polarity for low-water detection:
-//   1 = contact CLOSED (A0 pulled toward GND) means low water (float at bottom)
+// Reed / float polarity for low-water detection (PCF P2 only; not dead points):
+//   1 = contact CLOSED means low water (float at bottom)
 //   0 = inverted: contact OPEN means low water (float closes when tank is full)
 #define REED_CLOSED_MEANS_LOW_WATER  0
 
@@ -102,10 +86,6 @@
 // when LOCAL_WAKE_SECONDS is 30). Exceptions: invalid RTC, pending events,
 // overflow alert (and overflow ack after the button).
 #define SYNC_EVERY_WAKES        6
-
-// After a low-water wake that also syncs, keep the blue LED blinking at least
-// this long. Local-only wakes use a short blink instead.
-#define LOW_WATER_MIN_BLINK_MS  60000UL
 
 // Uncomment while debugging over USB Serial. Deep-sleep wake needs a D0↔RST
 // jumper; without it the board sleeps forever. This flag replaces deep sleep

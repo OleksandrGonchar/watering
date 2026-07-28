@@ -1,94 +1,99 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560" font-family="Helvetica, Arial, sans-serif">
-  <rect x="0" y="0" width="980" height="560" fill="#ffffff"/>
-  <text x="490" y="34" text-anchor="middle" font-size="19" font-weight="700" fill="#1f2933">Water-safety add-on: overflow + low-water sensors via PCF8574</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="720" viewBox="0 0 980 720" font-family="Helvetica, Arial, sans-serif">
+  <rect x="0" y="0" width="980" height="720" fill="#ffffff"/>
+  <text x="490" y="34" text-anchor="middle" font-size="18" font-weight="700" fill="#1f2933">PCF8574: water safety (P0–P4) + humidifier motion (P5–P7)</text>
 
   <!-- ===================== NODEMCU ===================== -->
-  <rect x="60" y="150" width="190" height="260" rx="12" fill="#eef3fb" stroke="#3b5bdb" stroke-width="2.5"/>
-  <text x="155" y="178" text-anchor="middle" font-size="15" font-weight="700" fill="#1c3faa">NodeMCU V3</text>
-  <text x="155" y="196" text-anchor="middle" font-size="12" fill="#3b5bdb">ESP8266 ESP-12E</text>
-  <circle cx="250" cy="240" r="4.5" fill="#fb8c00"/>
-  <text x="238" y="244" text-anchor="end" font-size="12" font-weight="600" fill="#1c3faa">3V3</text>
-  <circle cx="250" cy="285" r="4.5" fill="#00897b"/>
-  <text x="238" y="289" text-anchor="end" font-size="12" font-weight="600" fill="#1c3faa">D3 (SDA)</text>
-  <circle cx="250" cy="330" r="4.5" fill="#8e24aa"/>
-  <text x="238" y="334" text-anchor="end" font-size="12" font-weight="600" fill="#1c3faa">D4 (SCL)</text>
-  <circle cx="250" cy="375" r="4.5" fill="#424242"/>
-  <text x="238" y="379" text-anchor="end" font-size="12" font-weight="600" fill="#1c3faa">GND</text>
+  <rect x="40" y="100" width="180" height="280" rx="12" fill="#eef3fb" stroke="#3b5bdb" stroke-width="2.5"/>
+  <text x="130" y="128" text-anchor="middle" font-size="15" font-weight="700" fill="#1c3faa">NodeMCU V3</text>
+  <text x="130" y="146" text-anchor="middle" font-size="12" fill="#3b5bdb">ESP8266</text>
+  <circle cx="220" cy="190" r="4.5" fill="#fb8c00"/>
+  <text x="208" y="194" text-anchor="end" font-size="12" font-weight="600" fill="#1c3faa">3V3</text>
+  <circle cx="220" cy="235" r="4.5" fill="#00897b"/>
+  <text x="208" y="239" text-anchor="end" font-size="12" font-weight="600" fill="#1c3faa">D3 (SDA)</text>
+  <circle cx="220" cy="280" r="4.5" fill="#8e24aa"/>
+  <text x="208" y="284" text-anchor="end" font-size="12" font-weight="600" fill="#1c3faa">D4 (SCL)</text>
+  <circle cx="220" cy="325" r="4.5" fill="#424242"/>
+  <text x="208" y="329" text-anchor="end" font-size="12" font-weight="600" fill="#1c3faa">GND</text>
 
   <!-- ===================== PCF8574 ===================== -->
-  <rect x="430" y="120" width="220" height="330" rx="12" fill="#fff8e1" stroke="#f9a825" stroke-width="2.5"/>
-  <text x="540" y="148" text-anchor="middle" font-size="15" font-weight="700" fill="#f57f17">PCF8574</text>
-  <text x="540" y="166" text-anchor="middle" font-size="11" fill="#f57f17">I2C I/O expander (addr 0x20)</text>
+  <rect x="380" y="70" width="220" height="420" rx="12" fill="#fff8e1" stroke="#f9a825" stroke-width="2.5"/>
+  <text x="490" y="98" text-anchor="middle" font-size="15" font-weight="700" fill="#f57f17">PCF8574</text>
+  <text x="490" y="116" text-anchor="middle" font-size="11" fill="#f57f17">I2C I/O expander (addr 0x20)</text>
   <!-- left (bus) -->
-  <circle cx="430" cy="240" r="4.5" fill="#fb8c00"/>
-  <text x="442" y="244" font-size="12" font-weight="600" fill="#f57f17">VCC</text>
-  <circle cx="430" cy="285" r="4.5" fill="#00897b"/>
-  <text x="442" y="289" font-size="12" font-weight="600" fill="#f57f17">SDA</text>
-  <circle cx="430" cy="330" r="4.5" fill="#8e24aa"/>
-  <text x="442" y="334" font-size="12" font-weight="600" fill="#f57f17">SCL</text>
-  <circle cx="430" cy="375" r="4.5" fill="#424242"/>
-  <text x="442" y="379" font-size="12" font-weight="600" fill="#f57f17">GND</text>
+  <circle cx="380" cy="190" r="4.5" fill="#fb8c00"/>
+  <text x="392" y="194" font-size="12" font-weight="600" fill="#f57f17">VCC</text>
+  <circle cx="380" cy="235" r="4.5" fill="#00897b"/>
+  <text x="392" y="239" font-size="12" font-weight="600" fill="#f57f17">SDA</text>
+  <circle cx="380" cy="280" r="4.5" fill="#8e24aa"/>
+  <text x="392" y="284" font-size="12" font-weight="600" fill="#f57f17">SCL</text>
+  <circle cx="380" cy="325" r="4.5" fill="#424242"/>
+  <text x="392" y="329" font-size="12" font-weight="600" fill="#f57f17">GND</text>
   <!-- right (io) -->
-  <circle cx="650" cy="180" r="4.5" fill="#1e88e5"/>
-  <text x="638" y="184" text-anchor="end" font-size="12" font-weight="600" fill="#f57f17">P0</text>
-  <circle cx="650" cy="215" r="4.5" fill="#1e88e5"/>
-  <text x="638" y="219" text-anchor="end" font-size="12" font-weight="600" fill="#f57f17">P1</text>
-  <circle cx="650" cy="250" r="4.5" fill="#1565c0"/>
-  <text x="638" y="254" text-anchor="end" font-size="12" font-weight="600" fill="#f57f17">P2</text>
-  <circle cx="650" cy="290" r="4.5" fill="#e53935"/>
-  <text x="638" y="294" text-anchor="end" font-size="12" font-weight="600" fill="#f57f17">P3</text>
-  <circle cx="650" cy="325" r="4.5" fill="#1e88e5"/>
-  <text x="638" y="329" text-anchor="end" font-size="12" font-weight="600" fill="#f57f17">P4</text>
-  <circle cx="650" cy="365" r="4.5" fill="#616161"/>
-  <text x="638" y="369" text-anchor="end" font-size="12" font-weight="600" fill="#f57f17">P5</text>
+  <circle cx="600" cy="150" r="4.5" fill="#1e88e5"/>
+  <text x="588" y="154" text-anchor="end" font-size="12" font-weight="600" fill="#f57f17">P0</text>
+  <circle cx="600" cy="185" r="4.5" fill="#1e88e5"/>
+  <text x="588" y="189" text-anchor="end" font-size="12" font-weight="600" fill="#f57f17">P1</text>
+  <circle cx="600" cy="220" r="4.5" fill="#1565c0"/>
+  <text x="588" y="224" text-anchor="end" font-size="12" font-weight="600" fill="#f57f17">P2</text>
+  <circle cx="600" cy="255" r="4.5" fill="#e53935"/>
+  <text x="588" y="259" text-anchor="end" font-size="12" font-weight="600" fill="#f57f17">P3</text>
+  <circle cx="600" cy="290" r="4.5" fill="#616161"/>
+  <text x="588" y="294" text-anchor="end" font-size="12" font-weight="600" fill="#f57f17">P4</text>
+  <circle cx="600" cy="340" r="4.5" fill="#f9a825"/>
+  <text x="588" y="344" text-anchor="end" font-size="12" font-weight="600" fill="#f57f17">P5</text>
+  <circle cx="600" cy="375" r="4.5" fill="#6a1b9a"/>
+  <text x="588" y="379" text-anchor="end" font-size="12" font-weight="600" fill="#f57f17">P6</text>
+  <circle cx="600" cy="410" r="4.5" fill="#6a1b9a"/>
+  <text x="588" y="414" text-anchor="end" font-size="12" font-weight="600" fill="#f57f17">P7</text>
+  <text x="490" y="455" text-anchor="middle" font-size="10.5" fill="#bf360c">P0–P4 safety · P5–P7 motion</text>
 
   <!-- ===================== PERIPHERALS ===================== -->
-  <!-- Overflow sensor 1 -->
-  <rect x="760" y="160" width="180" height="42" rx="8" fill="#e3f2fd" stroke="#1e88e5" stroke-width="1.8"/>
-  <text x="850" y="178" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0d47a1">Overflow plate #1</text>
-  <text x="850" y="194" text-anchor="middle" font-size="10.5" fill="#0d47a1">bridge -> GND (input)</text>
-  <!-- Overflow sensor 2 -->
-  <rect x="760" y="205" width="180" height="42" rx="8" fill="#e3f2fd" stroke="#1e88e5" stroke-width="1.8"/>
-  <text x="850" y="223" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0d47a1">Overflow plate #2</text>
-  <text x="850" y="239" text-anchor="middle" font-size="10.5" fill="#0d47a1">bridge -> GND (input)</text>
-  <!-- Reed -->
-  <rect x="760" y="250" width="180" height="42" rx="8" fill="#e1f5fe" stroke="#1565c0" stroke-width="1.8"/>
-  <text x="850" y="268" text-anchor="middle" font-size="11.5" font-weight="700" fill="#01579b">Reed (low water)</text>
-  <text x="850" y="284" text-anchor="middle" font-size="10.5" fill="#01579b">float magnet closes -> GND</text>
-  <!-- Red LED -->
-  <rect x="760" y="295" width="180" height="34" rx="8" fill="#ffebee" stroke="#e53935" stroke-width="1.8"/>
-  <text x="850" y="316" text-anchor="middle" font-size="11.5" font-weight="700" fill="#b71c1c">Red LED (overflow)</text>
-  <!-- Blue LED -->
-  <rect x="760" y="332" width="180" height="34" rx="8" fill="#e3f2fd" stroke="#1e88e5" stroke-width="1.8"/>
-  <text x="850" y="353" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0d47a1">Blue LED (low water)</text>
-  <!-- Button -->
-  <rect x="760" y="369" width="180" height="42" rx="8" fill="#f5f5f5" stroke="#616161" stroke-width="1.8"/>
-  <text x="850" y="387" text-anchor="middle" font-size="11.5" font-weight="700" fill="#424242">Ack button</text>
-  <text x="850" y="403" text-anchor="middle" font-size="10.5" fill="#424242">press -> GND (acknowledge)</text>
+  <rect x="720" y="130" width="220" height="38" rx="8" fill="#e3f2fd" stroke="#1e88e5" stroke-width="1.8"/>
+  <text x="830" y="154" text-anchor="middle" font-size="12" font-weight="700" fill="#0d47a1">Overflow plate #1</text>
+
+  <rect x="720" y="165" width="220" height="38" rx="8" fill="#e3f2fd" stroke="#1e88e5" stroke-width="1.8"/>
+  <text x="830" y="189" text-anchor="middle" font-size="12" font-weight="700" fill="#0d47a1">Overflow plate #2</text>
+
+  <rect x="720" y="200" width="220" height="38" rx="8" fill="#e1f5fe" stroke="#1565c0" stroke-width="1.8"/>
+  <text x="830" y="224" text-anchor="middle" font-size="12" font-weight="700" fill="#01579b">Float / low water</text>
+
+  <rect x="720" y="235" width="220" height="38" rx="8" fill="#ffebee" stroke="#e53935" stroke-width="1.8"/>
+  <text x="830" y="259" text-anchor="middle" font-size="12" font-weight="700" fill="#b71c1c">Red LED (overflow)</text>
+
+  <rect x="720" y="270" width="220" height="38" rx="8" fill="#f5f5f5" stroke="#616161" stroke-width="1.8"/>
+  <text x="830" y="294" text-anchor="middle" font-size="12" font-weight="700" fill="#424242">Ack button</text>
+
+  <rect x="720" y="320" width="220" height="38" rx="8" fill="#fff8e1" stroke="#f9a825" stroke-width="1.8"/>
+  <text x="830" y="344" text-anchor="middle" font-size="12" font-weight="700" fill="#e65100">Motor dir relay IN</text>
+
+  <rect x="720" y="355" width="220" height="38" rx="8" fill="#f3e5f5" stroke="#6a1b9a" stroke-width="1.8"/>
+  <text x="830" y="379" text-anchor="middle" font-size="12" font-weight="700" fill="#4a148c">Top dead-point reed</text>
+
+  <rect x="720" y="390" width="220" height="38" rx="8" fill="#f3e5f5" stroke="#6a1b9a" stroke-width="1.8"/>
+  <text x="830" y="414" text-anchor="middle" font-size="12" font-weight="700" fill="#4a148c">Bottom dead-point reed</text>
 
   <!-- ===================== WIRES ===================== -->
-  <!-- 3V3 -> VCC -->
-  <polyline points="250,240 430,240" fill="none" stroke="#fb8c00" stroke-width="2.5"/>
-  <!-- SDA -->
-  <polyline points="250,285 430,285" fill="none" stroke="#00897b" stroke-width="2.5"/>
-  <!-- SCL -->
-  <polyline points="250,330 430,330" fill="none" stroke="#8e24aa" stroke-width="2.5"/>
-  <!-- GND -->
-  <polyline points="250,375 430,375" fill="none" stroke="#424242" stroke-width="2.5"/>
-  <!-- P0..P5 to peripherals -->
-  <polyline points="650,180 705,180 705,181 760,181" fill="none" stroke="#1e88e5" stroke-width="2"/>
-  <polyline points="650,215 705,215 705,226 760,226" fill="none" stroke="#1e88e5" stroke-width="2"/>
-  <polyline points="650,250 705,250 705,271 760,271" fill="none" stroke="#1565c0" stroke-width="2"/>
-  <polyline points="650,290 705,290 705,312 760,312" fill="none" stroke="#e53935" stroke-width="2"/>
-  <polyline points="650,325 705,325 705,349 760,349" fill="none" stroke="#1e88e5" stroke-width="2"/>
-  <polyline points="650,365 705,365 705,390 760,390" fill="none" stroke="#616161" stroke-width="2"/>
+  <polyline points="220,190 380,190" fill="none" stroke="#fb8c00" stroke-width="2.5"/>
+  <polyline points="220,235 380,235" fill="none" stroke="#00897b" stroke-width="2.5"/>
+  <polyline points="220,280 380,280" fill="none" stroke="#8e24aa" stroke-width="2.5"/>
+  <polyline points="220,325 380,325" fill="none" stroke="#424242" stroke-width="2.5"/>
+
+  <polyline points="600,150 660,150 660,149 720,149" fill="none" stroke="#1e88e5" stroke-width="2"/>
+  <polyline points="600,185 660,185 660,184 720,184" fill="none" stroke="#1e88e5" stroke-width="2"/>
+  <polyline points="600,220 660,220 660,219 720,219" fill="none" stroke="#1565c0" stroke-width="2"/>
+  <polyline points="600,255 660,255 660,254 720,254" fill="none" stroke="#e53935" stroke-width="2"/>
+  <polyline points="600,290 660,290 660,289 720,289" fill="none" stroke="#616161" stroke-width="2"/>
+  <polyline points="600,340 660,340 660,339 720,339" fill="none" stroke="#f9a825" stroke-width="2"/>
+  <polyline points="600,375 660,375 660,374 720,374" fill="none" stroke="#6a1b9a" stroke-width="2"/>
+  <polyline points="600,410 660,410 660,409 720,409" fill="none" stroke="#6a1b9a" stroke-width="2"/>
 
   <!-- ===================== NOTES ===================== -->
-  <rect x="60" y="430" width="590" height="110" rx="10" fill="#fafafa" stroke="#cfd4da" stroke-width="1.5"/>
-  <text x="76" y="454" font-size="13" font-weight="700" fill="#1f2933">Notes</text>
-  <text x="76" y="476" font-size="11.5" fill="#333">- SDA/SCL idle HIGH via 4.7k pull-ups; matches GPIO0/GPIO2 boot requirement.</text>
-  <text x="76" y="494" font-size="11.5" fill="#333">- Inputs P0/P1/P2/P5: PCF8574 pin written HIGH, contact sinks it to GND (active-low).</text>
-  <text x="76" y="512" font-size="11.5" fill="#333">- LEDs P3/P4 wired active-low (pin sinks current through the LED + resistor to VCC).</text>
-  <text x="76" y="530" font-size="11.5" fill="#333">- Direct-GPIO fallback (no PCF8574) is documented in README / config.h.example.</text>
+  <rect x="40" y="520" width="900" height="170" rx="10" fill="#fafafa" stroke="#cfd4da" stroke-width="1.5"/>
+  <text x="56" y="548" font-size="13" font-weight="700" fill="#1f2933">Notes</text>
+  <text x="56" y="572" font-size="12" fill="#333">- SDA/SCL idle HIGH via 4.7k pull-ups; matches GPIO0/GPIO2 boot requirement.</text>
+  <text x="56" y="594" font-size="12" fill="#333">- Inputs P0/P1/P2/P4/P6/P7: write HIGH (weak pull-up), contact sinks to GND (active-low).</text>
+  <text x="56" y="616" font-size="12" fill="#333">- Red LED P3 wired active-low (pin sinks current through LED + resistor to VCC).</text>
+  <text x="56" y="638" font-size="12" fill="#333">- Motor direction on P5; humidifier+motor power stays on ESP D8 (boot-safe LOW).</text>
+  <text x="56" y="660" font-size="12" fill="#333">- Top/bottom dead-point reeds are separate from the float on P2 (low-water only).</text>
 </svg>

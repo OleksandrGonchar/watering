@@ -32,27 +32,4 @@ void blinkRedUntilButton() {
   Serial.println("[alerts] overflow acknowledged by button");
 }
 
-void blinkBlueFor(uint32_t durationMs) {
-  Serial.printf("[alerts] LOW WATER — blue LED blinking for %u ms\n", durationMs);
-
-  bool ledOn = false;
-  uint32_t lastToggle = 0;
-  uint32_t start = millis();
-  while (millis() - start < durationMs) {
-    uint32_t nowMs = millis();
-    if (nowMs - lastToggle >= LED_BLINK_INTERVAL_MS) {
-      lastToggle = nowMs;
-      ledOn = !ledOn;
-      sensors::blueLed(ledOn);
-    }
-    delay(10);
-    yield();
-  }
-
-  sensors::blueLed(false);
-  // One more settle write — GPIO3 can be weakly pulled by the USB-UART.
-  delay(20);
-  sensors::blueLed(false);
-}
-
 }  // namespace alerts

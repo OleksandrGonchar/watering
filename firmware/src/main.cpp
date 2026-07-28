@@ -40,14 +40,6 @@ constexpr uint32_t MAX_DEEP_SLEEP_SECONDS = 70UL * 60UL;
 #ifndef SYNC_EVERY_WAKES
 #define SYNC_EVERY_WAKES 6
 #endif
-#ifndef LOW_WATER_MIN_BLINK_MS
-#define LOW_WATER_MIN_BLINK_MS 60000UL
-#endif
-
-// Short blue blink on local-only wakes so a 60s LED window cannot block the
-// 1-minute sensor cadence.
-constexpr uint32_t LOW_WATER_LOCAL_BLINK_MS = 3000UL;
-
 constexpr uint32_t WAKE_META_MAGIC = 0x57414B45UL;  // 'WAKE'
 
 struct WakeMeta {
@@ -71,14 +63,16 @@ void saveWakeMeta(const WakeMeta& meta) {
 void deepSleepFor(uint32_t seconds) {
   if (seconds == 0) seconds = LOCAL_WAKE_SECONDS;
   if (seconds > MAX_DEEP_SLEEP_SECONDS) seconds = MAX_DEEP_SLEEP_SECONDS;
-  // Drive LEDs off before sleep so an active-low blue LED cannot stay lit
-  // while the pin floats.
   sensors::redLed(false);
-  sensors::blueLed(false);
 #ifdef DEBUG_SKIP_DEEP_SLEEP
   // USB debugging: timer wake needs D0↔RST. Without it, deep sleep never
-  // returns — use a plain delay + restart so Serial keeps working.
-  Serial.printf("[main] DEBUG: delay %u s then restart (no deep sleep)\n", seconds);
+  // returns — use a plain delay + ESP.restart(). The bootloader lines that
+  // follow ("ets Jan 8… rst cause:…") are normal soft-restart noise, not a
+  // physical RESET button press. Remove this define for real deep sleep.
+  Serial.printf(
+      "[main] DEBUG: delay %u s then ESP.restart() "
+      "(looks like reset in Serial — expected)\n",
+      seconds);
   Serial.flush();
   delay((uint32_t)seconds * 1000UL);
   ESP.restart();
@@ -131,17 +125,17 @@ void saveAlertSnapshot(bool overflow, uint8_t overflowSensors, bool lowWater) {
 }  // namespace
 
 void setup() {
-  // TX-only UART: we never read Serial input, and freeing RX/GPIO3 lets the
-  // bare-GPIO wiring drive the blue LED there. Logs on TX still work.
-  Serial.begin(115200, SERIAL_8N1, SERIAL_TX_ONLY);
+  Serial.begin(115200);
   delay(50);
   Serial.println();
   Serial.println("==== Smart Watering boot ====");
   Serial.printf("Device: %s\n", DEVICE_ID);
 
+  // sensors::begin() brings up the PCF8574 first — humidifier motor direction
+  // and dead-point reeds live on the expander.
   pump::begin();
-  humidifier::begin();
   sensors::begin();
+  humidifier::begin();
   bool storageOk = storage::begin();
   rtc::begin();  // logs raw time; isValid() gates schedules
 
@@ -261,10 +255,6 @@ void setup() {
       alerts::blinkRedUntilButton();
       ackOverflow = true;
       needSync = true;
-    } else if (lowWaterAlert) {
-      alerts::blinkBlueFor(LOW_WATER_LOCAL_BLINK_MS);
-      deepSleepFor(LOCAL_WAKE_SECONDS);
-      return;
     } else {
       deepSleepFor(LOCAL_WAKE_SECONDS);
       return;
@@ -278,8 +268,6 @@ void setup() {
     if (overflowAlert) {
       alerts::blinkRedUntilButton();
       ackOverflow = true;
-    } else if (lowWaterAlert) {
-      alerts::blinkBlueFor(LOW_WATER_MIN_BLINK_MS);
     }
     deepSleepFor(LOCAL_WAKE_SECONDS);
     return;
@@ -296,8 +284,6 @@ void setup() {
     if (overflowAlert) {
       alerts::blinkRedUntilButton();
       ackOverflow = true;
-    } else if (lowWaterAlert) {
-      alerts::blinkBlueFor(LOW_WATER_MIN_BLINK_MS);
     }
     deepSleepFor(LOCAL_WAKE_SECONDS);
     return;
@@ -337,8 +323,6 @@ void setup() {
     if (overflowAlert && !ackOverflow) {
       alerts::blinkRedUntilButton();
       ackOverflow = true;
-    } else if (lowWaterAlert) {
-      alerts::blinkBlueFor(LOW_WATER_MIN_BLINK_MS);
     }
     deepSleepFor(LOCAL_WAKE_SECONDS);
     return;
@@ -427,9 +411,6 @@ void setup() {
       api::sync(tokens, configVersion, /*sendClaimCode=*/false, noPending, ackReport);
     }
     storage::clearAlerts();
-  } else if (lowWaterAlert) {
-    // Blink the blue LED for at least the configured window, then sleep.
-    alerts::blinkBlueFor(LOW_WATER_MIN_BLINK_MS);
   }
 
   // Local cadence owns sleep length (server nextWakeSeconds is ignored).
